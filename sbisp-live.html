@@ -1,0 +1,164 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>SBISP – Smart Barangay Information and Service Portal</title><link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet"><style>
+:root{--navy:#0B2447;--blue:#19376D;--mid:#576CBC;--sky:#A5D7E8;--mist:#EAF4F9;--ink:#0B2447;--white:#fff;--ok:#1F8A5B;--warn:#B7791F;--bad:#C0392B;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--navy);font-family:'Atkinson Hyperlegible',system-ui,sans-serif;color:var(--ink);display:flex;justify-content:center;align-items:center}
+.phone{width:100%;max-width:390px;height:100%;max-height:844px;background:var(--mist);display:flex;flex-direction:column;position:relative;overflow:hidden}
+@media(min-width:500px){.phone{border-radius:28px;border:6px solid var(--blue);height:844px}}
+#app{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.top{background:var(--navy);color:var(--white);padding:18px 20px 22px;display:flex;align-items:center;gap:12px}
+.top h1{font-size:20px}.top small{color:var(--sky);display:block;font-size:13px}
+.back{background:none;border:0;color:var(--sky);font:inherit;font-size:15px;cursor:pointer;padding:4px 0}
+.body{padding:18px 20px 24px;display:flex;flex-direction:column;gap:14px}
+.hero{background:var(--navy);color:var(--white);padding:56px 24px 34px}
+.hero h1{font-size:30px;line-height:1.15}.hero p{color:var(--sky);margin-top:10px}
+.card{background:var(--white);border-radius:14px;padding:14px 16px;border:1px solid #D3E4EC}
+.card h3{font-size:16px}.card p{font-size:14px;color:#3d5170;margin-top:4px}
+.f{display:flex;flex-direction:column;gap:5px;font-size:14px;font-weight:700}
+.f input,.f select,.f textarea{font:inherit;font-weight:400;padding:12px;border:1.5px solid #B9D3DF;border-radius:10px;background:var(--white);color:var(--ink)}
+.f input:focus,.f select:focus,.f textarea:focus,.btn:focus-visible,.tab:focus-visible,.back:focus-visible{outline:3px solid var(--mid);outline-offset:2px}
+form{display:flex;flex-direction:column;gap:14px}
+.btn{font:inherit;font-weight:700;background:var(--mid);color:var(--white);border:0;border-radius:12px;padding:14px;cursor:pointer;font-size:16px}
+.btn.ghost{background:none;color:var(--mid);border:1.5px solid var(--mid)}
+.btn.sm{padding:8px 12px;font-size:13px;border-radius:8px}
+.err{color:var(--bad);font-size:14px}
+.link{background:none;border:0;color:var(--mid);font:inherit;text-decoration:underline;cursor:pointer;font-size:15px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.act{background:var(--blue);color:var(--white);border:0;border-radius:14px;padding:18px 14px;font:inherit;font-weight:700;text-align:left;cursor:pointer;font-size:16px}
+.act span{display:block;font-weight:400;font-size:13px;color:var(--sky);margin-top:4px}
+.act[disabled]{opacity:.5}
+.chip{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700;background:#DCE3F5;color:var(--blue)}
+.chip.ok{background:#D6F0E3;color:var(--ok)}.chip.warn{background:#F8EBCF;color:var(--warn)}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.meta{font-size:12px;color:#5a6d8a;margin-top:6px}
+.sec{font-size:15px;font-weight:700;margin-top:4px}
+.unread{border-left:5px solid var(--mid)}
+.tabs{display:flex;background:var(--white);border-top:1px solid #D3E4EC}
+.tab{flex:1;background:none;border:0;padding:10px 0 12px;font:inherit;font-size:12px;color:#5a6d8a;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative}
+.tab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tab.on{color:var(--mid);font-weight:700}
+.badge{position:absolute;top:4px;left:56%;background:var(--bad);color:#fff;border-radius:99px;font-size:10px;padding:1px 6px}
+#toast{position:absolute;left:16px;right:16px;bottom:84px;background:var(--navy);color:var(--white);padding:12px 14px;border-radius:12px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.show{opacity:1}
+.otp{letter-spacing:.4em;font-size:22px;text-align:center}
+@media(prefers-reduced-motion:reduce){#toast{transition:none}}
+</style><style>.row2{display:flex;gap:8px;margin-top:10px}.btn.bad{background:var(--bad)}</style></head><body><div class="phone"><div id="app"></div><div id="toast" role="status"></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script><script>const SB_URL='https://rcjfnnlvksjusolxidfw.supabase.co',SB_KEY='sb_publishable_E0EjQXUogXY1zRuG8tR0LQ_XJMZiQmE';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+let S={p:null,email:'',reqs:[],notes:[],pend:[]},ui={screen:'boot',err:'',tmp:{}};
+const FLOW={Complaint:['Pending','Processing','Resolved'],Clearance:['Pending','Processing','Ready for pickup']};
+const NEWS=[['Barangay assembly','Open to all residents of Guinsorongan this Saturday, 2:00 PM, at the barangay hall.'],['Clean-up drive','Bring gloves and sacks. Meet at the covered court at 6:30 AM.'],['Free vaccination','Health center, Monday to Wednesday, 8:00 AM to 3:00 PM.']];
+const IC={home:'M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',reqs:'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',alerts:'M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21a2 2 0 0 0 4 0',profile:'M20 21a8 8 0 0 0-16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8',sverify:'M20 6L9 17l-5-5'};
+IC.sreqs=IC.reqs;
+const RTABS=[['home','Home'],['reqs','Requests'],['alerts','Alerts'],['profile','Profile']];
+const STABS=[['sverify','Verify'],['sreqs','Requests'],['profile','Profile']];
+const $app=document.getElementById('app'),$t=document.getElementById('toast');let tt;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=t=>new Date(t).toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'});
+const toast=m=>{$t.textContent=m;$t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>$t.classList.remove('show'),4000)};
+const go=s=>{ui.screen=s;ui.err='';render()};
+const fail=m=>{ui.err=m;render()};
+const msg=e=>(e&&e.message)||'Something went wrong. Try again.';
+const staff=()=>S.p&&S.p.role==='staff';
+const notify=(uid,text)=>sb.from('notifications').insert({user_id:uid,text});
+const chip=s=>`<span class="chip ${/Resolved|Ready|Verified|Staff/i.test(s)?'ok':/Pending/i.test(s)?'warn':''}">${esc(s)}</span>`;
+const field=(l,n,t,x)=>`<label class="f">${l}<input name="${n}" type="${t||'text'}" required ${x||''}></label>`;
+const sel=(l,n,o)=>`<label class="f">${l}<select name="${n}" required>${o.map(v=>`<option>${esc(v)}</option>`).join('')}</select></label>`;
+const top=(t,s,b)=>`<div class="top">${b?`<button class="back" data-go="${b}" aria-label="Back">‹ Back</button>`:''}<div><h1>${t}</h1>${s?`<small>${s}</small>`:''}</div></div>`;
+const errH=()=>ui.err?`<p class="err" role="alert">${esc(ui.err)}</p>`:'';
+
+async function ensureProfile(u){
+ const r=await sb.from('profiles').select('*').eq('id',u.id).maybeSingle();
+ if(r.data)return r.data;
+ const m=u.user_metadata||{};
+ const i=await sb.from('profiles').insert({id:u.id,full_name:m.full_name||'Resident',mobile:m.mobile||'',purok:m.purok||''}).select().single();
+ if(i.error)throw i.error;return i.data}
+async function load(){
+ const pr=await sb.from('profiles').select('*').eq('id',S.p.id).single();if(pr.data)S.p=pr.data;
+ const st=staff();
+ const q=await Promise.all([
+  st?sb.from('requests').select('*, profiles(full_name,mobile,purok)').order('created_at',{ascending:false}):sb.from('requests').select('*').eq('user_id',S.p.id).order('created_at',{ascending:false}),
+  sb.from('notifications').select('*').eq('user_id',S.p.id).order('created_at',{ascending:false}),
+  st?sb.from('profiles').select('*').eq('status','pending'):Promise.resolve({data:[]})]);
+ S.reqs=q[0].data||[];S.notes=q[1].data||[];S.pend=q[2].data||[]}
+async function enter(u){
+ try{S.p=await ensureProfile(u);S.email=u.email;await load();go(staff()?'sverify':S.p.status==='unverified'?'verifyid':'home')}
+ catch(e){await sb.auth.signOut();S.p=null;go('login');fail(e.code==='23505'?'That mobile number is already registered.':'Could not load your account. '+msg(e))}}
+async function boot(){const s=await sb.auth.getSession();if(s.data.session)await enter(s.data.session.user);else go('login')}
+
+const reqCard=(r,st)=>{const f=FLOW[r.type],i=f.indexOf(r.status),n=i<f.length-1;
+ return `<div class="card"><div class="row"><h3>${esc(r.title)}</h3>${chip(r.status)}</div>${st&&r.profiles?`<p><b>${esc(r.profiles.full_name)}</b>, ${esc(r.profiles.purok||'')} · ${esc(r.profiles.mobile||'')}</p>`:''}<p>${esc(r.detail)}</p><p class="meta">${esc(r.ref)} · ${fmt(r.created_at)}</p>${st&&n?`<button class="btn sm" style="margin-top:10px" data-adv="${r.id}">Mark as ${f[i+1]}</button>`:''}</div>`};
+const empty=t=>`<div class="card"><p>${t}</p></div>`;
+const V={
+boot:()=>'<div class="hero"><h1>SBISP</h1><p>Loading…</p></div>',
+login:()=>`<div class="hero"><h1>Smart Barangay Information and Service Portal</h1><p>Barangay Guinsorongan, Catbalogan City, Samar</p></div><div class="body"><form data-form="login">${field('Email','email','email','autocomplete="username"')}${field('Password','pw','password','autocomplete="current-password"')}${errH()}<button class="btn">Log in</button></form><button class="link" data-go="register">Create a resident account</button></div>`,
+register:()=>`${top('Create account','Step 1 of 3 – your details','login')}<div class="body"><form data-form="register">${field('Full name','name','text','autocomplete="name"')}${field('Mobile number (09XXXXXXXXX)','mobile','tel','inputmode="numeric" maxlength="11"')}${field('Email','email','email','autocomplete="email"')}${sel('Purok','purok',['Purok 1','Purok 2','Purok 3','Purok 4','Purok 5'])}${field('Password (6+ characters)','pw','password','minlength="6" autocomplete="new-password"')}${errH()}<button class="btn">Send verification code</button></form></div>`,
+otp:()=>`${top('Enter code','Step 2 of 3 – sent to '+esc(ui.tmp.email),'register')}<div class="body"><form data-form="otp"><label class="f">6-digit code<input class="otp" name="code" inputmode="numeric" maxlength="8" required autocomplete="one-time-code"></label>${errH()}<button class="btn">Confirm code</button></form><button class="link" data-act="resend">Send a new code</button></div>`,
+verifyid:()=>`${top('Verify residency','Step 3 of 3 – confirm you live here')}<div class="body"><p>Staff compare your details with the barangay household list before you can file requests.</p><form data-form="verifyid">${sel('ID type','idType',['Voter’s ID','National ID','Driver’s License','Senior Citizen ID','School ID'])}${field('ID number','idNo')}${errH()}<button class="btn">Submit for verification</button></form><button class="link" data-go="home">Do this later</button></div>`,
+home:()=>{const p=S.p,ok=p.status==='verified',rs=S.reqs.slice(0,2);
+ const b=ok?'':`<div class="card"><h3>${p.status==='pending'?'Verification pending':p.status==='rejected'?'Verification not approved':'Residency not verified'}</h3><p>${p.status==='pending'?'Staff are checking your details. You can use services once approved.':p.status==='rejected'?'Check your ID details and submit them again.':'Verify your residency to file complaints and request documents.'}</p>${p.status==='pending'?'':'<button class="btn sm" style="margin-top:10px" data-go="verifyid">Verify now</button>'}</div>`;
+ return `${top('Hello, '+esc(p.full_name.split(' ')[0]),'Barangay Guinsorongan')}<div class="body">${b}<div class="grid"><button class="act" data-go="complaint" ${ok?'':'data-lock'}>File a complaint<span>Report a problem</span></button><button class="act" data-go="clearance" ${ok?'':'data-lock'}>Request clearance<span>Documents and certificates</span></button></div><p class="sec">Recent requests</p>${rs.length?rs.map(r=>reqCard(r)).join(''):empty('No requests yet. File a complaint or request a document to begin.')}<p class="sec">Announcements</p>${NEWS.map(n=>`<div class="card"><h3>${n[0]}</h3><p>${n[1]}</p></div>`).join('')}</div>`},
+complaint:()=>`${top('File a complaint',null,'home')}<div class="body"><form data-form="complaint">${sel('Category','cat',['Peace and order','Garbage and sanitation','Road and streetlight','Noise','Water supply','Other'])}${field('Short title','title','text','maxlength="60"')}<label class="f">What happened?<textarea name="detail" rows="5" required></textarea></label>${field('Location (street, landmark)','loc')}${errH()}<button class="btn">Submit complaint</button></form></div>`,
+clearance:()=>`${top('Request a document',null,'home')}<div class="body"><form data-form="clearance">${sel('Document','doc',['Barangay Clearance','Certificate of Residency','Certificate of Indigency','Business Clearance'])}${field('Purpose (e.g. employment)','purpose')}${sel('Pickup','pickup',['Barangay hall'])}<p class="meta">Processing usually takes 1 to 3 working days. You’ll get an alert when it’s ready.</p>${errH()}<button class="btn">Submit request</button></form></div>`,
+reqs:()=>`${top('My requests',S.reqs.length+' total')}<div class="body">${S.reqs.length?S.reqs.map(r=>reqCard(r)).join(''):empty('Nothing here yet. Your complaints and document requests appear in this list.')}</div>`,
+alerts:()=>`${top('Alerts',S.notes.filter(x=>!x.read).length+' unread')}<div class="body">${S.notes.length?S.notes.map(x=>`<div class="card ${x.read?'':'unread'}"><p style="margin:0;color:var(--ink)">${esc(x.text)}</p><p class="meta">${fmt(x.created_at)}</p></div>`).join('')+'<button class="btn ghost" data-act="readall">Mark all as read</button>':empty('No alerts yet. Updates on your requests will show up here.')}</div>`,
+profile:()=>{const p=S.p;return `${top('My profile',null)}<div class="body"><div class="card"><h3>${esc(p.full_name)}</h3><p>${esc(p.mobile)} · ${esc(S.email)}</p><p>${esc(p.purok||'')}, Barangay Guinsorongan, Catbalogan City, Samar</p><div class="row" style="margin-top:10px"><span class="meta">${staff()?'Role':'Residency'}</span>${chip(staff()?'Staff':p.status==='verified'?'Verified':p.status==='pending'?'Pending':'Not verified')}</div></div><button class="btn" data-act="logout">Log out</button></div>`},
+sverify:()=>`${top('Verify residents',S.pend.length+' waiting')}<div class="body">${S.pend.length?S.pend.map(p=>`<div class="card"><h3>${esc(p.full_name)}</h3><p>${esc(p.purok||'')} · ${esc(p.mobile)}</p><p>${esc(p.id_type||'')}: ${esc(p.id_number||'')}</p><div class="row2"><button class="btn sm" data-appr="${p.id}">Approve</button><button class="btn sm bad" data-rej="${p.id}">Reject</button></div></div>`).join(''):empty('No residents are waiting. New verification requests appear here.')}</div>`,
+sreqs:()=>`${top('All requests',S.reqs.length+' total')}<div class="body">${S.reqs.length?S.reqs.map(r=>reqCard(r,true)).join(''):empty('No requests yet.')}</div>`
+};
+function render(){
+ const s=ui.screen,tabs=staff()?STABS:RTABS,tabbed=tabs.some(t=>t[0]===s);
+ document.querySelectorAll('.tabs').forEach(x=>x.remove());
+ $app.innerHTML=V[s]()+(tabbed?'<div style="flex:1"></div>':'');
+ if(tabbed){const un=staff()?S.pend.length:S.notes.filter(x=>!x.read).length,bt=staff()?'sverify':'alerts';
+  const bar=document.createElement('nav');bar.className='tabs';
+  bar.innerHTML=tabs.map(t=>`<button class="tab ${s===t[0]?'on':''}" data-go="${t[0]}"><svg viewBox="0 0 24 24"><path d="${IC[t[0]]}"/></svg>${t[1]}${t[0]===bt&&un?`<span class="badge">${un}</span>`:''}</button>`).join('');
+  $app.parentNode.insertBefore(bar,$t)}
+ $app.scrollTop=0}
+const FORMS={
+ login:async d=>{const r=await sb.auth.signInWithPassword({email:d.email.trim(),password:d.pw});
+  if(r.error)return fail(r.error.message==='Invalid login credentials'?'Email or password is incorrect.':r.error.message);await enter(r.data.user)},
+ register:async d=>{d.mobile=d.mobile.trim();d.email=d.email.trim();
+  if(!/^09\d{9}$/.test(d.mobile))return fail('Enter an 11-digit mobile number starting with 09.');
+  const r=await sb.auth.signUp({email:d.email,password:d.pw,options:{data:{full_name:d.name.trim(),mobile:d.mobile,purok:d.purok}}});
+  if(r.error)return fail(r.error.message);
+  if(r.data.session)return enter(r.data.user);
+  ui.tmp={email:d.email};go('otp');toast('We sent a 6-digit code to '+d.email)},
+ otp:async d=>{const r=await sb.auth.verifyOtp({email:ui.tmp.email,token:d.code.trim(),type:'signup'});
+  if(r.error)return fail('That code didn’t work. Check the email and try again, or ask for a new code.');await enter(r.data.user)},
+ verifyid:async d=>{const r=await sb.from('profiles').update({status:'pending',id_type:d.idType,id_number:d.idNo}).eq('id',S.p.id);
+  if(r.error)return fail(r.error.message);
+  await notify(S.p.id,'Your residency verification was submitted. Staff will review it shortly.');await load();go('home');toast('Submitted for verification')},
+ complaint:async d=>{const ref='CMP-'+String(Date.now()).slice(-6);
+  const r=await sb.from('requests').insert({ref,user_id:S.p.id,type:'Complaint',title:d.title,detail:`${d.cat} at ${d.loc}. ${d.detail}`});
+  if(r.error)return fail(/row-level/.test(r.error.message)?'Only verified residents can file requests.':r.error.message);
+  await notify(S.p.id,`Complaint ${ref} received. Staff will review it.`);await load();go('reqs');toast('Complaint '+ref+' submitted')},
+ clearance:async d=>{const ref='CLR-'+String(Date.now()).slice(-6);
+  const r=await sb.from('requests').insert({ref,user_id:S.p.id,type:'Clearance',title:d.doc,detail:`Purpose: ${d.purpose}. Pickup: ${d.pickup}.`});
+  if(r.error)return fail(/row-level/.test(r.error.message)?'Only verified residents can file requests.':r.error.message);
+  await notify(S.p.id,`${d.doc} request ${ref} received.`);await load();go('reqs');toast('Request '+ref+' submitted')}
+};
+const ACTS={
+ resend:async()=>{const r=await sb.auth.resend({type:'signup',email:ui.tmp.email});toast(r.error?r.error.message:'A new code is on its way')},
+ readall:async()=>{await sb.from('notifications').update({read:true}).eq('user_id',S.p.id).eq('read',false);await load();render()},
+ logout:async()=>{await sb.auth.signOut();S={p:null,email:'',reqs:[],notes:[],pend:[]};go('login')}
+};
+async function decide(id,status,okMsg,note){const r=await sb.from('profiles').update({status}).eq('id',id);
+ if(r.error)return toast(r.error.message);await notify(id,note);await load();render();toast(okMsg)}
+document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target,d={};new FormData(f).forEach((v,k)=>d[k]=v);
+ const b=f.querySelector('button');if(b){b.disabled=true;b.textContent='Please wait…'}
+ try{await FORMS[f.dataset.form](d)}catch(x){fail(msg(x))}});
+document.addEventListener('click',async e=>{
+ const t=e.target.closest('[data-go],[data-act],[data-adv],[data-appr],[data-rej]');if(!t)return;
+ try{
+ if(t.hasAttribute('data-lock'))return toast('Verify your residency first to use this service.');
+ if(t.dataset.go){if(['reqs','alerts','home','sverify','sreqs'].includes(t.dataset.go)&&S.p)await load();return go(t.dataset.go)}
+ if(t.dataset.act)return ACTS[t.dataset.act]();
+ if(t.dataset.appr)return decide(t.dataset.appr,'verified','Resident approved','Your residency is verified. You can now file requests.');
+ if(t.dataset.rej)return decide(t.dataset.rej,'rejected','Resident rejected','We couldn’t verify your residency. Check your ID details and submit again.');
+ const r=S.reqs.find(x=>String(x.id)===t.dataset.adv),f=FLOW[r.type],n=f[f.indexOf(r.status)+1];
+ const u=await sb.from('requests').update({status:n}).eq('id',r.id);if(u.error)return toast(u.error.message);
+ await notify(r.user_id,`${r.ref} is now: ${n}.`);await load();render();toast(`${r.ref} → ${n}`)
+ }catch(x){toast(msg(x))}});
+document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&S.p&&!document.querySelector('form')){await load();render()}});
+render();boot();
+</script></body></html>
