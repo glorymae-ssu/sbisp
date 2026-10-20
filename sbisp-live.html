@@ -42,7 +42,19 @@ form{display:flex;flex-direction:column;gap:14px}
 #toast.show{opacity:1}
 .otp{letter-spacing:.4em;font-size:22px;text-align:center}
 @media(prefers-reduced-motion:reduce){#toast{transition:none}}
-</style><style>.row2{display:flex;gap:8px;margin-top:10px}.btn.bad{background:var(--bad)}</style></head><body><div class="phone"><div id="app"></div><div id="toast" role="status"></div></div><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script><script>const SB_URL='https://rcjfnnlvksjusolxidfw.supabase.co',SB_KEY='sb_publishable_E0EjQXUogXY1zRuG8tR0LQ_XJMZiQmE';
+</style><style>.row2{display:flex;gap:8px;margin-top:10px}.btn.bad{background:var(--bad)}</style></head><body><div class="phone"><div id="app"></div><div id="toast" role="status"></div></div><script>
+window.onerror=function(m){var a=document.getElementById('app');if(a&&!a.children.length){a.innerHTML='<div class="hero"><h1>SBISP</h1><p>Something went wrong: '+String(m)+'</p></div>'}};
+(function(){
+var urls=['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js','https://unpkg.com/@supabase/supabase-js@2.58.0/dist/umd/supabase.js','https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js','https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js'];
+function show(m){document.getElementById('app').innerHTML='<div class="hero"><h1>SBISP</h1><p>'+m+'</p></div>'}
+function next(i){
+ if(i>=urls.length){show('Could not load the app library. Check your internet connection, turn off any content blocker, then refresh.');return}
+ var s=document.createElement('script');s.src=urls[i];
+ s.onload=function(){if(window.supabase&&window.supabase.createClient){start()}else{next(i+1)}};
+ s.onerror=function(){next(i+1)};
+ document.head.appendChild(s)}
+function start(){
+const SB_URL='https://rcjfnnlvksjusolxidfw.supabase.co',SB_KEY='sb_publishable_E0EjQXUogXY1zRuG8tR0LQ_XJMZiQmE';
 const sb=supabase.createClient(SB_URL,SB_KEY);
 let S={p:null,email:'',reqs:[],notes:[],pend:[]},ui={screen:'boot',err:'',tmp:{}};
 const FLOW={Complaint:['Pending','Processing','Resolved'],Clearance:['Pending','Processing','Ready for pickup']};
@@ -161,4 +173,8 @@ document.addEventListener('click',async e=>{
  }catch(x){toast(msg(x))}});
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&S.p&&!document.querySelector('form')){await load();render()}});
 render();boot();
+
+}
+show('Loading…');next(0);
+})();
 </script></body></html>
