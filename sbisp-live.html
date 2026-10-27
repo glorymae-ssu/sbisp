@@ -84,6 +84,7 @@ const $app=document.getElementById('app'),$t=document.getElementById('toast');le
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const toast=m=>{$t.textContent=m;$t.classList.add('show');clearTimeout(tt);tt=setTimeout(()=>$t.classList.remove('show'),3800)};
 const go=s=>{ui.screen=s;ui.err='';ui.open=null;render()};
+const e164=m=>'+63'+m.slice(1);
 const fail=m=>{ui.err=m;render()};
 const msg=e=>(e&&e.message)||'Something went wrong. Try again.';
 const staff=()=>S.p&&S.p.role==='staff';
@@ -100,7 +101,7 @@ async function ensureProfile(u){
  const r=await sb.from('profiles').select('*').eq('id',u.id).maybeSingle();
  if(r.data)return r.data;
  const m=u.user_metadata||{};
- const i=await sb.from('profiles').insert({id:u.id,full_name:'',mobile:m.mobile||'',purok:''}).select().single();
+ const i=await sb.from('profiles').insert({id:u.id,full_name:'',mobile:m.mobile||('0'+String(u.phone||'').replace(/^\+?63/,'')),purok:''}).select().single();
  if(i.error)throw i.error;return i.data}
 async function load(){
  const pr=await sb.from('profiles').select('*').eq('id',S.p.id).single();if(pr.data)S.p=pr.data;
@@ -128,13 +129,15 @@ const icon=t=>/residency/i.test(t)?'✅':/complaint|CMP/i.test(t)?'📝':/reques
 const V={
 splash:()=>`<div class="center"><img class="logo" src="${LOGO}" alt="SBISP seal"><div class="title">Smart Barangay Information and Service Portal</div><p class="sub">Your Barangay Services, Made Easier.</p><div class="bar"><i></i></div></div>`,
 welcome:()=>`<div class="center"><img class="logo" src="${LOGO}" alt="SBISP seal"><div class="title">Welcome to SBISP</div><p class="sub">Access your barangay services in one place.</p><div style="width:100%;display:flex;flex-direction:column;gap:12px;margin-top:10px"><button class="btn" data-go="register">Create Account</button><button class="btn alt" data-go="login">Log In</button></div><button class="link" data-go="org">🧭 View Barangay Organizational Chart</button></div>`,
-register:()=>`${top('Create Your Account',null,'welcome')}<div class="body"><form data-form="register">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX" autocomplete="username"')}${field('Create Password','pw','password','minlength="6" placeholder="At least 6 characters" autocomplete="new-password"')}<div class="note">ⓘ Your mobile number is your login. Next, staff verify that you live in the barangay.</div>${errH()}<button class="btn">Continue</button></form></div>`,
-login:()=>`${top('Log In',null,'welcome')}<div class="body"><img class="logo" style="width:100px;height:100px;align-self:center" src="${LOGO}" alt="SBISP seal"><form data-form="login">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" autocomplete="username"')}${field('Password','pw','password','autocomplete="current-password"')}${errH()}<button class="btn">Log In</button></form><button class="btn alt" data-act="otp">Use OTP instead</button><button class="btn alt" data-go="register">Create Account</button><button class="link" data-act="forgot">Forgot password?</button></div>`,
+register:()=>`${top('Create Your Account',null,'welcome')}<div class="body"><form data-form="register">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX" autocomplete="username"')}${field('Create Password','pw','password','minlength="6" placeholder="At least 6 characters" autocomplete="new-password"')}<div class="note">ⓘ We’ll text a 6-digit code to verify your number. Then staff verify that you live in the barangay.</div>${errH()}<button class="btn">Continue</button></form></div>`,
+login:()=>`${top('Log In',null,'welcome')}<div class="body"><img class="logo" style="width:100px;height:100px;align-self:center" src="${LOGO}" alt="SBISP seal"><form data-form="login">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" autocomplete="username"')}${field('Password','pw','password','autocomplete="current-password"')}${errH()}<button class="btn">Log In</button></form><button class="btn alt" data-go="otplogin">Use OTP instead</button><button class="btn alt" data-go="register">Create Account</button><button class="link" data-act="forgot">Forgot password?</button></div>`,
 home:()=>{const p=S.p,nm=(p.full_name||'').split(' ')[0]||'Resident',rs=S.reqs.slice(0,3);
  return `<div class="top"><div class="av" style="width:56px;height:56px;font-size:26px;background:#fff;margin:0">${esc(nm[0].toUpperCase())}</div><div style="flex:1"><h1 style="font-size:20px">Maupay na Gab-i, ${esc(nm)}!</h1><small>Barangay Guinsorongan</small></div><button class="back" data-go="alerts" aria-label="Notifications">🔔</button><button class="back" data-go="profile" aria-label="Profile">👤</button></div><div class="body"><div class="card status"><p style="margin:0">Resident Status</p><div style="margin-top:8px">${pOf(p)}</div></div><p class="h2">Barangay Services</p>${tiles()}<p class="h2">Recent Requests</p>${rs.length?rs.map(r=>reqCard(r)).join(''):empty('No requests yet.')}</div>`},
 services:()=>`${top('Services','Barangay Guinsorongan')}<div class="body">${tiles()}</div>`,
 certs:()=>`${top('Certificates &amp; Clearances',null,'home')}<div class="body">${CERTS.map((c,i)=>`<button class="card" style="border:0;text-align:left;font:inherit;cursor:pointer;display:flex;gap:14px;align-items:center" data-cert="${i}"><span style="font-size:30px">${c[2]}</span><span style="flex:1"><h3>${c[0]}</h3><p>${c[1]}</p></span><span>›</span></button>`).join('')}</div>`,
 certreq:()=>`${top('Request Certificate',null,'certs')}<div class="body"><div class="card"><h3>${esc(ui.cert[0])}</h3><p>${esc(ui.cert[1])}</p></div><form data-form="certreq">${field('Purpose (e.g. employment)','purpose')}${sel('Pickup','pickup',['Barangay hall'])}<p class="meta">You’ll get a notification when it’s ready.</p>${errH()}<button class="btn">Submit Request</button></form></div>`,
+otp:()=>`${top('Enter Code','Sent to '+esc(ui.tmp.mobile),ui.tmp.mode==='signup'?'register':'otplogin')}<div class="body"><form data-form="otp"><label class="f">6-digit code<input name="code" inputmode="numeric" maxlength="6" required autocomplete="one-time-code" style="text-align:center;letter-spacing:.4em;font-size:22px"></label>${errH()}<button class="btn">Confirm Code</button></form><button class="link" data-act="resend">Send a new code</button></div>`,
+otplogin:()=>`${top('Log In with OTP',null,'login')}<div class="body"><form data-form="otplogin">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX"')}${errH()}<button class="btn">Send Code</button></form></div>`,
 complaint:()=>`${top('Submit a Complaint',null,'home')}<div class="body"><form data-form="complaint">${sel('Complaint Category','cat',['Peace and Order','Garbage and Sanitation','Road and Streetlight','Noise','Water Supply','Other'])}${field('Subject','subject','text','maxlength="60"')}<label class="f">Description<textarea name="detail" rows="4" required></textarea></label>${field('Location','loc')}<label class="f">Date of Incident<input name="date" type="date" required value="${new Date().toISOString().slice(0,10)}"></label>${errH()}<button class="btn">Submit Complaint</button></form></div>`,
 residency:()=>`${top('Residency',null,'home')}<div class="body"><p>Staff compare your details with the barangay household list.</p><form data-form="residency">${field('Full name','name','text','autocomplete="name"')}${sel('Purok','purok',['Purok 1','Purok 2','Purok 3','Purok 4','Purok 5'])}${field('Street / House no.','street')}${sel('ID type','idType',['Voter’s ID','National ID','Driver’s License','Senior Citizen ID','School ID'])}${field('ID number','idNo')}${errH()}<button class="btn">Submit for Verification</button></form></div>`,
 reqs:()=>`${top('My Requests')}<div class="body"><input id="q" class="f" style="font:inherit;font-size:16px;padding:14px;border:1.5px solid #cfd8e6;border-radius:12px" placeholder="Search by reference number" value="${esc(ui.q)}"><div class="chips">${['ALL','PENDING','PROCESSING','COMPLETED'].map(f=>`<button class="chip ${ui.filter===f?'on':''}" data-f="${f}">${f}</button>`).join('')}</div><div id="list" style="display:flex;flex-direction:column;gap:14px">${listHtml()}</div></div>`,
@@ -157,14 +160,23 @@ function render(){
 const FORMS={
  login:async d=>{const m=d.mobile.trim();
   if(!/^09\d{9}$/.test(m))return fail('Enter your 11-digit mobile number starting with 09.');
-  const r=await sb.auth.signInWithPassword({email:m+'@sbisp.app',password:d.pw});
+  const r=await sb.auth.signInWithPassword({phone:e164(m),password:d.pw});
   if(r.error)return fail(r.error.message==='Invalid login credentials'?'Mobile number or password is incorrect.':r.error.message);await enter(r.data.user)},
  register:async d=>{const m=d.mobile.trim();
   if(!/^09\d{9}$/.test(m))return fail('Enter an 11-digit mobile number starting with 09.');
-  const r=await sb.auth.signUp({email:m+'@sbisp.app',password:d.pw,options:{data:{mobile:m}}});
-  if(r.error)return fail(/registered/i.test(r.error.message)?'That mobile number already has an account. Log in instead.':r.error.message);
-  if(!r.data.session)return fail('That mobile number may already have an account. Try logging in.');
-  S.justRegistered=true;await prep(r.data.user);go('residency');toast('Account created. Now verify your residency.')},
+  const r=await sb.auth.signUp({phone:e164(m),password:d.pw,options:{data:{mobile:m}}});
+  if(r.error)return fail(/registered|exists/i.test(r.error.message)?'That mobile number already has an account. Log in instead.':r.error.message);
+  if(r.data.session){await prep(r.data.user);go('residency');return toast('Account created. Now verify your residency.')}
+  ui.tmp={phone:e164(m),mobile:m,mode:'signup'};go('otp');toast('We sent a 6-digit code to '+m)},
+ otplogin:async d=>{const m=d.mobile.trim();
+  if(!/^09\d{9}$/.test(m))return fail('Enter your 11-digit mobile number starting with 09.');
+  const r=await sb.auth.signInWithOtp({phone:e164(m),options:{shouldCreateUser:false}});
+  if(r.error)return fail(r.error.message);
+  ui.tmp={phone:e164(m),mobile:m,mode:'login'};go('otp');toast('We sent a 6-digit code to '+m)},
+ otp:async d=>{const r=await sb.auth.verifyOtp({phone:ui.tmp.phone,token:d.code.trim(),type:'sms'});
+  if(r.error)return fail('That code didn’t work. Check it and try again, or ask for a new code.');
+  if(ui.tmp.mode==='signup'){await prep(r.data.user);go('residency');return toast('Number verified. Now verify your residency.')}
+  await enter(r.data.user)},
  residency:async d=>{const r=await sb.from('profiles').update({full_name:d.name.trim(),purok:d.purok+', '+d.street.trim(),status:'pending',id_type:d.idType,id_number:d.idNo}).eq('id',S.p.id);
   if(r.error)return fail(r.error.message);
   await notify(S.p.id,'Your residency verification was submitted. Staff will review it shortly.');await load();go('home');toast('Submitted for verification')},
@@ -178,7 +190,7 @@ const FORMS={
   await notify(S.p.id,`${ui.cert[0]} request ${ref} is awaiting approval.`);await load();go('reqs');toast('Request '+ref+' submitted')}
 };
 const ACTS={
- otp:async()=>toast('OTP login needs an SMS service, which isn’t enabled yet.'),
+ resend:async()=>{const t=ui.tmp,r=t.mode==='signup'?await sb.auth.resend({type:'sms',phone:t.phone}):await sb.auth.signInWithOtp({phone:t.phone});toast(r.error?r.error.message:'A new code was sent')},
  forgot:async()=>toast('Please ask barangay staff to reset your password.'),
  photo:async()=>toast('Photo upload is coming soon.'),
  readall:async()=>{await sb.from('notifications').update({read:true}).eq('user_id',S.p.id).eq('read',false);await load();render()},
