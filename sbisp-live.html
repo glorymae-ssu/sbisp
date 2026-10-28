@@ -132,7 +132,7 @@ const icon=t=>/residency/i.test(t)?'✅':/complaint|CMP/i.test(t)?'📝':/reques
 const V={
 splash:()=>`<div class="center"><img class="logo" src="${LOGO}" alt="SBISP seal"><div class="title">Smart Barangay Information and Service Portal</div><p class="sub">Your Barangay Services, Made Easier.</p><div class="bar"><i></i></div></div>`,
 welcome:()=>`<div class="center"><img class="logo" src="${LOGO}" alt="SBISP seal"><div class="title">Welcome to SBISP</div><p class="sub">Access your barangay services in one place.</p><div style="width:100%;display:flex;flex-direction:column;gap:12px;margin-top:10px"><button class="btn" data-go="register">Create Account</button><button class="btn alt" data-go="login">Log In</button></div><button class="link" data-go="org">🧭 View Barangay Organizational Chart</button></div>`,
-register:()=>`${top('Create Your Account',null,'welcome')}<div class="body"><form data-form="register">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX" autocomplete="username"')}${field('Create Password','pw','password','minlength="6" placeholder="At least 6 characters" autocomplete="new-password"')}<div class="note">ⓘ We’ll text a 6-digit code to verify your number. Then staff verify that you live in the barangay.</div>${errH()}<button class="btn">Continue</button></form></div>`,
+register:()=>`${top('Create Your Account',null,'welcome')}<div class="body"><form data-form="register">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" placeholder="09XXXXXXXXX" autocomplete="username" value="'+esc(ui.keep||'')+'"')}${field('Create Password','pw','password','minlength="6" placeholder="At least 6 characters" autocomplete="new-password"')}${field('Type Again the Password','pw2','password','minlength="6" placeholder="Re-enter your password" autocomplete="new-password"')}<div class="note">ⓘ We’ll text a 6-digit code to verify your number. Then staff verify that you live in the barangay.</div>${errH()}<button class="btn">Continue</button></form></div>`,
 login:()=>`${top('Log In',null,'welcome')}<div class="body"><img class="logo" style="width:100px;height:100px;align-self:center" src="${LOGO}" alt="SBISP seal"><form data-form="login">${field('Mobile Number','mobile','tel','inputmode="numeric" maxlength="11" autocomplete="username"')}${field('Password','pw','password','autocomplete="current-password"')}${errH()}<button class="btn">Log In</button></form><button class="btn alt" data-go="otplogin">Use OTP instead</button><button class="btn alt" data-go="register">Create Account</button><button class="link" data-act="forgot">Forgot password?</button></div>`,
 home:()=>{const p=S.p,nm=(p.full_name||'').split(' ')[0]||'Resident',rs=S.reqs.slice(0,3);
  return `<div class="top"><div class="av" style="width:56px;height:56px;font-size:26px;background:#fff;margin:0">${esc(nm[0].toUpperCase())}</div><div style="flex:1"><h1 style="font-size:20px">Maupay na Gab-i, ${esc(nm)}!</h1><small>Barangay Guinsorongan</small></div><button class="back" data-go="alerts" aria-label="Notifications">🔔</button><button class="back" data-go="profile" aria-label="Profile">👤</button></div><div class="body"><div class="card status"><p style="margin:0">Resident Status</p><div style="margin-top:8px">${pOf(p)}</div></div><p class="h2">Barangay Services</p>${tiles()}<p class="h2">Recent Requests</p>${rs.length?rs.map(r=>reqCard(r)).join(''):empty('No requests yet.')}</div>`},
@@ -171,12 +171,13 @@ const FORMS={
   if(!/^09\d{9}$/.test(m))return fail('Enter your 11-digit mobile number starting with 09.');
   const r=await sb.auth.signInWithPassword({phone:e164(m),password:d.pw});
   if(r.error)return fail(r.error.message==='Invalid login credentials'?'Mobile number or password is incorrect.':r.error.message);await enter(r.data.user)},
- register:async d=>{const m=d.mobile.trim();
+ register:async d=>{const m=d.mobile.trim();ui.keep=m;
   if(!/^09\d{9}$/.test(m))return fail('Enter an 11-digit mobile number starting with 09.');
+  if(d.pw!==d.pw2)return fail('Passwords do not match. Please type the password again.');
   const r=await sb.auth.signUp({phone:e164(m),password:d.pw,options:{data:{mobile:m}}});
   if(r.error)return fail(/registered|exists/i.test(r.error.message)?'That mobile number already has an account. Log in instead.':r.error.message);
-  if(r.data.session){await prep(r.data.user);go('residency');return toast('Account created. Now verify your residency.')}
-  ui.tmp={phone:e164(m),mobile:m,mode:'signup'};go('otp');toast('We sent a 6-digit code to '+m)},
+  if(r.data.session){ui.keep='';await prep(r.data.user);go('residency');return toast('Account created. Now verify your residency.')}
+  ui.keep='';ui.tmp={phone:e164(m),mobile:m,mode:'signup'};go('otp');toast('We sent a 6-digit code to '+m)},
  otplogin:async d=>{const m=d.mobile.trim();
   if(!/^09\d{9}$/.test(m))return fail('Enter your 11-digit mobile number starting with 09.');
   const r=await sb.auth.signInWithOtp({phone:e164(m),options:{shouldCreateUser:false}});
