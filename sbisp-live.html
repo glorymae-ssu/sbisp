@@ -72,12 +72,13 @@ function next(i){
 function start(){
 const SB_URL='https://rcjfnnlvksjusolxidfw.supabase.co',SB_KEY='sb_publishable_E0EjQXUogXY1zRuG8tR0LQ_XJMZiQmE';
 const sb=supabase.createClient(SB_URL,SB_KEY);
-let S={p:null,reqs:[],notes:[],pend:[]},ui={screen:'splash',err:'',tmp:{},filter:'ALL',q:'',cert:null,open:null};
+let S={p:null,reqs:[],notes:[],pend:[],users:[]},ui={screen:'splash',err:'',tmp:{},filter:'ALL',q:'',cert:null,open:null};
 const FLOW={Complaint:['Pending','Under Review','Resolved'],Clearance:['For Approval','Processing','Completed']};
 const CERTS=[['Barangay Clearance','For employment, IDs, travel and other transactions','📝'],['Certificate of Residency','Proof that you live in the barangay','🏠'],['Certificate of Indigency','For medical, educational and legal assistance','📄'],['Certificate of Good Moral Character','Proof of good standing in the community','📄'],['Certificate of No Pending Complaint/Case','Proof of no pending case in the barangay','📄'],['Certificate of Low Income','For scholarships and assistance programs','📄']];
 const TILES=[['complaint','📢','Complaints'],['certs','📄','Certificates'],['residency','🏠','Residency'],['soon','🗳️','Voter Information'],['soon','📋','Blotter / Summons'],['reqs','🗂️','My Requests']];
 const RT=[['home','🏠','Home'],['services','🧰','Services'],['reqs','🗂️','Requests'],['alerts','🔔','Notifications'],['profile','👤','Profile']];
 const ST=[['sverify','✅','Verify'],['sreqs','🗂️','Requests'],['profile','👤','Profile']];
+const AT=[['adash','📊','Dashboard'],['ausers','👥','Residents'],['areqs','🗂️','Requests'],['profile','👤','Profile']];
 const ORG1=[['Juan D. Dela Cruz','Committee on Peace and Order'],['Carmela S. Ortega','Committee on Health'],['Eduardo P. Bautista','Committee on Infrastructure'],['Rosalinda G. Mercado','Committee on Education'],['Antonio L. Salazar','Committee on Livelihood'],['Teresita M. Paras','Committee on Women and Family'],['Benjamin R. Castillo','Committee on Sanitation and Environment']];
 const SKM=['Mika Angela Soriano','Paolo Miguel Tan','Trisha Anne Abad','John Mark Estrada','Sofia Grace Lazaro'];
 const $app=document.getElementById('app'),$t=document.getElementById('toast');let tt;
@@ -87,7 +88,8 @@ const go=s=>{ui.screen=s;ui.err='';ui.open=null;render()};
 const e164=m=>'+63'+m.slice(1);
 const fail=m=>{ui.err=m;render()};
 const msg=e=>(e&&e.message)||'Something went wrong. Try again.';
-const staff=()=>S.p&&S.p.role==='staff';
+const staff=()=>S.p&&(S.p.role==='staff'||S.p.role==='admin');
+const isAdmin=()=>S.p&&S.p.role==='admin';
 const notify=(uid,text)=>sb.from('notifications').insert({user_id:uid,text});
 const bucket=s=>/^(Pending|For Approval)$/.test(s)?'PENDING':/^(Processing|Under Review)$/.test(s)?'PROCESSING':'COMPLETED';
 const field=(l,n,t,x)=>`<label class="f">${l}<input name="${n}" type="${t||'text'}" required ${x||''}></label>`;
@@ -109,10 +111,11 @@ async function load(){
  const q=await Promise.all([
   st?sb.from('requests').select('*, profiles(full_name,mobile,purok)').order('created_at',{ascending:false}):sb.from('requests').select('*').eq('user_id',S.p.id).order('created_at',{ascending:false}),
   sb.from('notifications').select('*').eq('user_id',S.p.id).order('created_at',{ascending:false}),
-  st?sb.from('profiles').select('*').eq('status','pending'):Promise.resolve({data:[]})]);
- S.reqs=q[0].data||[];S.notes=q[1].data||[];S.pend=q[2].data||[]}
+  st?sb.from('profiles').select('*').eq('status','pending'):Promise.resolve({data:[]}),
+  isAdmin()?sb.from('profiles').select('*').order('created_at',{ascending:false}):Promise.resolve({data:[]})]);
+ S.reqs=q[0].data||[];S.notes=q[1].data||[];S.pend=q[2].data||[];S.users=q[3].data||[]}
 const prep=async u=>{S.p=await ensureProfile(u);await load()};
-const dest=()=>staff()?'sverify':'home';
+const dest=()=>isAdmin()?'adash':staff()?'sverify':'home';
 async function enter(u){try{await prep(u);go(dest())}catch(e){await sb.auth.signOut();S.p=null;go('welcome');toast('Could not load your account. '+msg(e))}}
 async function boot(){
  const w=new Promise(r=>setTimeout(r,1600));
@@ -120,8 +123,8 @@ async function boot(){
   if(s.data.session){await Promise.all([w,prep(s.data.session.user)]);go(dest())}else{await w;go('welcome')}}
  catch(e){await w;go('welcome')}}
 
-const reqCard=(r,st)=>{const f=FLOW[r.type]||FLOW.Clearance,i=f.indexOf(r.status),n=i<f.length-1,b=bucket(r.status);
- return `<div class="card"><div class="row"><div><h3>${r.type==='Complaint'?'Complaint':esc(r.title)}</h3><p>${esc(r.ref)} · ${String(r.created_at||'').slice(0,10)}</p></div><span class="pill ${b==='PENDING'?'w':''}">${esc(r.status)}</span></div>${r.type==='Complaint'?`<p>${esc(r.title)}</p>`:''}${st&&r.profiles?`<p><b>${esc(r.profiles.full_name||'Resident')}</b> · ${esc(r.profiles.mobile||'')}</p>`:''}${st&&r.detail?`<p>${esc(r.detail)}</p>`:''}${st&&n?`<button class="btn sm" style="margin-top:10px" data-adv="${r.id}">Mark as ${f[i+1]}</button>`:''}</div>`};
+const reqCard=(r,st,ad)=>{const f=FLOW[r.type]||FLOW.Clearance,i=f.indexOf(r.status),n=i<f.length-1,b=bucket(r.status);
+ return `<div class="card"><div class="row"><div><h3>${r.type==='Complaint'?'Complaint':esc(r.title)}</h3><p>${esc(r.ref)} · ${String(r.created_at||'').slice(0,10)}</p></div><span class="pill ${b==='PENDING'?'w':''}">${esc(r.status)}</span></div>${r.type==='Complaint'?`<p>${esc(r.title)}</p>`:''}${st&&r.profiles?`<p><b>${esc(r.profiles.full_name||'Resident')}</b> · ${esc(r.profiles.mobile||'')}</p>`:''}${st&&r.detail?`<p>${esc(r.detail)}</p>`:''}${st&&n?`<button class="btn sm" style="margin-top:10px" data-adv="${r.id}">Mark as ${f[i+1]}</button>`:''}${ad?`<div class="row" style="justify-content:flex-start;margin-top:10px"><button class="btn sm alt" data-editreq="${r.id}">Edit</button><button class="btn sm bad" data-delreq="${r.id}">Delete</button></div>`:''}</div>`};
 const listHtml=()=>{const l=S.reqs.filter(r=>(ui.filter==='ALL'||bucket(r.status)===ui.filter)&&String(r.ref).toLowerCase().includes(ui.q.toLowerCase()));return l.length?l.map(r=>reqCard(r)).join(''):empty('No requests found.')};
 const tiles=()=>`<div class="grid">${TILES.map(t=>`<button class="tile" data-go="${t[0]}"><b>${t[1]}</b>${t[2]}</button>`).join('')}</div>`;
 const icon=t=>/residency/i.test(t)?'✅':/complaint|CMP/i.test(t)?'📝':/request|CLR|certificate|clearance/i.test(t)?'📄':'📢';
@@ -143,16 +146,22 @@ residency:()=>`${top('Residency',null,'home')}<div class="body"><p>Staff compare
 reqs:()=>`${top('My Requests')}<div class="body"><input id="q" class="f" style="font:inherit;font-size:16px;padding:14px;border:1.5px solid #cfd8e6;border-radius:12px" placeholder="Search by reference number" value="${esc(ui.q)}"><div class="chips">${['ALL','PENDING','PROCESSING','COMPLETED'].map(f=>`<button class="chip ${ui.filter===f?'on':''}" data-f="${f}">${f}</button>`).join('')}</div><div id="list" style="display:flex;flex-direction:column;gap:14px">${listHtml()}</div></div>`,
 alerts:()=>`${top('Notifications')}<div class="body">${S.notes.length?`<button class="link" style="align-self:flex-start;text-decoration:none" data-act="readall">Mark all as read</button>`+S.notes.map(x=>`<div class="card ${x.read?'':'unread'}" style="display:flex;gap:12px;align-items:center"><span style="font-size:28px">${icon(x.text)}</span><div><p style="margin:0;color:var(--ink)">${esc(x.text)}</p><p class="meta">${String(x.created_at).slice(0,10)}</p></div></div>`).join(''):empty('No notifications yet.')}</div>`,
 profile:()=>{const p=S.p,nm=p.full_name||'Resident';
- return `${top('Profile')}<div class="body"><div class="av">${esc(nm[0].toUpperCase())}</div><button class="btn alt sm" style="align-self:center" data-act="photo">📷 Add Photo</button><div style="text-align:center"><h3 style="color:var(--g1);font-size:20px">${esc(nm)}</h3><p class="sub">${esc(p.mobile)}</p></div><div class="card"><div class="li"><span>${staff()?'Role':'Resident Status'}</span><b>${staff()?'<span class="pill">Staff</span>':pOf(p)}</b></div><div class="li"><span>Barangay</span><b>Guinsorongan</b></div><div class="li"><span>Address</span><b>${esc(p.purok||'—')}</b></div></div><div class="card"><button class="li" style="width:100%;background:none;border:0;font:inherit;cursor:pointer" data-open="info"><span style="color:var(--ink)">Personal Information</span><span>›</span></button>${ui.open==='info'?`<p>Name: ${esc(p.full_name||'—')}</p><p>Mobile: ${esc(p.mobile)}</p><p>ID on file: ${esc(p.id_type||'—')}</p>`:''}<button class="li" style="width:100%;background:none;border:0;font:inherit;cursor:pointer" data-open="role"><span style="color:var(--ink)">My Role &amp; Permissions</span><span>›</span></button>${ui.open==='role'?`<p>${staff()?'Barangay staff: verify residents and update the status of complaints and certificate requests.':'Resident: file complaints and request certificates once your residency is verified.'}</p>`:''}</div><button class="btn" data-act="logout">Log Out</button></div>`},
+ return `${top('Profile')}<div class="body"><div class="av">${esc(nm[0].toUpperCase())}</div><button class="btn alt sm" style="align-self:center" data-act="photo">📷 Add Photo</button><div style="text-align:center"><h3 style="color:var(--g1);font-size:20px">${esc(nm)}</h3><p class="sub">${esc(p.mobile)}</p></div><div class="card"><div class="li"><span>${staff()?'Role':'Resident Status'}</span><b>${staff()?`<span class="pill">${isAdmin()?'Administrator':'Staff'}</span>`:pOf(p)}</b></div><div class="li"><span>Barangay</span><b>Guinsorongan</b></div><div class="li"><span>Address</span><b>${esc(p.purok||'—')}</b></div></div><div class="card"><button class="li" style="width:100%;background:none;border:0;font:inherit;cursor:pointer" data-open="info"><span style="color:var(--ink)">Personal Information</span><span>›</span></button>${ui.open==='info'?`<p>Name: ${esc(p.full_name||'—')}</p><p>Mobile: ${esc(p.mobile)}</p><p>ID on file: ${esc(p.id_type||'—')}</p>`:''}<button class="li" style="width:100%;background:none;border:0;font:inherit;cursor:pointer" data-open="role"><span style="color:var(--ink)">My Role &amp; Permissions</span><span>›</span></button>${ui.open==='role'?`<p>${isAdmin()?'Administrator (Barangay Secretary): manage residents and roles, update or edit any request, and delete records.':staff()?'Barangay staff: verify residents and update the status of complaints and certificate requests.':'Resident: file complaints and request certificates once your residency is verified.'}</p>`:''}</div><button class="btn" data-act="logout">Log Out</button></div>`},
 org:()=>`${top('Organizational Chart',null,S.p?'profile':'welcome')}<div class="body"><div class="card" style="text-align:center"><h3 style="font-size:20px">Barangay Guinsorongan</h3><p>Catbalogan City, Samar</p></div><p class="h2">Barangay Council</p><div class="org">Roberto M. Villanueva<small>Punong Barangay</small></div><p class="cap">Sangguniang Barangay Members</p><div class="og">${ORG1.map(o=>`<div class="card"><b>${o[0]}</b><span>Barangay Kagawad<br>${o[1]}</span></div>`).join('')}</div><p class="h2">Sangguniang Kabataan (SK)</p><div class="org">Kyle Andrei Lim<small>SK Chairperson</small></div><p class="cap">SK Council Members</p><div class="og">${SKM.map(n=>`<div class="card"><b>${n}</b><span>SK Kagawad</span></div>`).join('')}</div><p class="cap">Appointed SK Officials</p><div class="og"><div class="card"><b>Bea Camille Ramos</b><span>SK Secretary</span></div><div class="card"><b>Dennis Paul Cabrera</b><span>SK Treasurer</span></div></div><p class="cap">SK Employees</p><div class="og"><div class="card"><b>Lorna D. Pineda</b><span>SK Employee<br>SK Clerk</span></div></div></div>`,
+adash:()=>{const u=S.users||[],c=b=>S.reqs.filter(r=>bucket(r.status)===b).length,n=(v,l)=>`<div class="card"><h3 style="font-size:28px;color:var(--g1)">${v}</h3><p>${l}</p></div>`;
+ return `${top('Admin Dashboard','Barangay Secretary')}<div class="body"><div class="grid">${n(u.filter(x=>x.role==='resident').length,'Residents')}${n(S.pend.length,'Awaiting verification')}${n(c('PENDING'),'Pending requests')}${n(c('COMPLETED'),'Completed requests')}</div><p class="h2">Manage</p><div class="grid"><button class="tile" data-go="ausers"><b>👥</b>Residents</button><button class="tile" data-go="areqs"><b>🗂️</b>Requests</button><button class="tile" data-go="org"><b>🧭</b>Org Chart</button><button class="tile" data-go="profile"><b>👤</b>My Profile</button></div></div>`},
+ausers:()=>`${top('Residents &amp; Staff',(S.users||[]).length+' accounts')}<div class="body">${(S.users||[]).map(p=>`<div class="card"><div class="row"><div><h3>${esc(p.full_name||'(no name yet)')}</h3><p>${esc(p.mobile)} · ${esc(p.purok||'—')}</p></div>${pOf(p)}</div><label class="f" style="margin-top:10px">Role<select data-role="${p.id}" ${p.id===S.p.id?'disabled':''}>${['resident','staff','admin'].map(r=>`<option ${p.role===r?'selected':''}>${r}</option>`).join('')}</select></label><div class="row" style="justify-content:flex-start;margin-top:10px;flex-wrap:wrap">${p.status==='pending'?`<button class="btn sm" data-appr="${p.id}">Approve</button><button class="btn sm bad" data-rej="${p.id}">Reject</button>`:''}<button class="btn sm alt" data-edituser="${p.id}">Edit</button>${p.id===S.p.id?'':`<button class="btn sm bad" data-deluser="${p.id}">Delete</button>`}</div></div>`).join('')}</div>`,
+areqs:()=>`${top('All Requests','Admin · '+S.reqs.length+' total')}<div class="body">${S.reqs.length?S.reqs.map(r=>reqCard(r,true,true)).join(''):empty('No requests yet.')}</div>`,
+edituser:()=>{const p=(S.users||[]).find(x=>x.id===ui.edit)||{};return `${top('Edit Account',null,'ausers')}<div class="body"><form data-form="edituser"><label class="f">Full name<input name="name" value="${esc(p.full_name||'')}"></label><label class="f">Purok / Address<input name="purok" value="${esc(p.purok||'')}"></label><label class="f">Residency status<select name="status">${['unverified','pending','verified','rejected'].map(s=>`<option ${p.status===s?'selected':''}>${s}</option>`).join('')}</select></label>${errH()}<button class="btn">Save Changes</button></form></div>`},
+editreq:()=>{const r=S.reqs.find(x=>String(x.id)===String(ui.edit))||{},f=FLOW[r.type]||FLOW.Clearance;return `${top('Edit Request',esc(r.ref||''),'areqs')}<div class="body"><form data-form="editreq">${field('Title','title','text','value="'+esc(r.title||'')+'"')}<label class="f">Details<textarea name="detail" rows="4">${esc(r.detail||'')}</textarea></label><label class="f">Status<select name="status">${f.map(s=>`<option ${r.status===s?'selected':''}>${s}</option>`).join('')}</select></label>${errH()}<button class="btn">Save Changes</button></form></div>`},
 sverify:()=>`${top('Verify Residents',S.pend.length+' waiting')}<div class="body">${S.pend.length?S.pend.map(p=>`<div class="card"><h3>${esc(p.full_name||'Resident')}</h3><p>${esc(p.purok||'')} · ${esc(p.mobile)}</p><p>${esc(p.id_type||'')}: ${esc(p.id_number||'')}</p><div class="row" style="justify-content:flex-start;margin-top:10px"><button class="btn sm" data-appr="${p.id}">Approve</button><button class="btn sm bad" data-rej="${p.id}">Reject</button></div></div>`).join(''):empty('No residents are waiting for verification.')}</div>`,
 sreqs:()=>`${top('All Requests',S.reqs.length+' total')}<div class="body">${S.reqs.length?S.reqs.map(r=>reqCard(r,true)).join(''):empty('No requests yet.')}</div>`
 };
 function render(){
- const s=ui.screen,tabs=staff()?ST:RT,tabbed=tabs.some(t=>t[0]===s);
+ const s=ui.screen,tabs=isAdmin()?AT:staff()?ST:RT,tabbed=tabs.some(t=>t[0]===s);
  document.querySelectorAll('.tabs').forEach(x=>x.remove());
  $app.innerHTML=V[s]()+(tabbed?'<div style="flex:1"></div>':'');
- if(tabbed){const un=staff()?S.pend.length:S.notes.filter(x=>!x.read).length,bt=staff()?'sverify':'alerts';
+ if(tabbed){const un=staff()?S.pend.length:S.notes.filter(x=>!x.read).length,bt=isAdmin()?'ausers':staff()?'sverify':'alerts';
   const bar=document.createElement('nav');bar.className='tabs';
   bar.innerHTML=tabs.map(t=>`<button class="tab ${s===t[0]?'on':''}" data-go="${t[0]}"><b>${t[1]}</b>${t[2]}${t[0]===bt&&un?`<span class="badge">${un}</span>`:''}</button>`).join('');
   $app.parentNode.insertBefore(bar,$t)}
@@ -173,6 +182,10 @@ const FORMS={
   const r=await sb.auth.signInWithOtp({phone:e164(m),options:{shouldCreateUser:false}});
   if(r.error)return fail(r.error.message);
   ui.tmp={phone:e164(m),mobile:m,mode:'login'};go('otp');toast('We sent a 6-digit code to '+m)},
+ edituser:async d=>{const r=await sb.from('profiles').update({full_name:d.name.trim(),purok:(d.purok||'').trim(),status:d.status}).eq('id',ui.edit);
+  if(r.error)return fail(r.error.message);await load();go('ausers');toast('Account updated')},
+ editreq:async d=>{const r=await sb.from('requests').update({title:d.title,detail:d.detail,status:d.status}).eq('id',ui.edit);
+  if(r.error)return fail(r.error.message);await load();go('areqs');toast('Request updated')},
  otp:async d=>{const r=await sb.auth.verifyOtp({phone:ui.tmp.phone,token:d.code.trim(),type:'sms'});
   if(r.error)return fail('That code didn’t work. Check it and try again, or ask for a new code.');
   if(ui.tmp.mode==='signup'){await prep(r.data.user);go('residency');return toast('Number verified. Now verify your residency.')}
@@ -194,7 +207,7 @@ const ACTS={
  forgot:async()=>toast('Please ask barangay staff to reset your password.'),
  photo:async()=>toast('Photo upload is coming soon.'),
  readall:async()=>{await sb.from('notifications').update({read:true}).eq('user_id',S.p.id).eq('read',false);await load();render()},
- logout:async()=>{await sb.auth.signOut();S={p:null,reqs:[],notes:[],pend:[]};go('welcome')}
+ logout:async()=>{await sb.auth.signOut();S={p:null,reqs:[],notes:[],pend:[],users:[]};go('welcome')}
 };
 async function decide(id,status,okMsg,note){const r=await sb.from('profiles').update({status}).eq('id',id);
  if(r.error)return toast(r.error.message);await notify(id,note);await load();render();toast(okMsg)}
@@ -203,7 +216,7 @@ document.addEventListener('submit',async e=>{e.preventDefault();const f=e.target
  try{await FORMS[f.dataset.form](d)}catch(x){fail(msg(x))}});
 document.addEventListener('input',e=>{if(e.target.id==='q'){ui.q=e.target.value;document.getElementById('list').innerHTML=listHtml()}});
 document.addEventListener('click',async e=>{
- const t=e.target.closest('[data-go],[data-act],[data-adv],[data-appr],[data-rej],[data-cert],[data-f],[data-open]');if(!t)return;
+ const t=e.target.closest('[data-go],[data-act],[data-adv],[data-appr],[data-rej],[data-cert],[data-f],[data-open],[data-edituser],[data-deluser],[data-editreq],[data-delreq]');if(!t)return;
  const d=t.dataset;
  try{
  if(d.f){ui.filter=d.f;return render()}
@@ -215,15 +228,20 @@ document.addEventListener('click',async e=>{
    if((g==='complaint'||g==='certs')&&S.p.status!=='verified')return toast('Verify your residency first. Tap Residency.');
    if(g==='residency'&&S.p.status==='verified')return toast('Your residency is already verified.');
    if(g==='residency'&&S.p.status==='pending')return toast('Your verification is still being reviewed.');
-   if(['reqs','alerts','home','sverify','sreqs'].includes(g))await load()}
+   if(['reqs','alerts','home','sverify','sreqs','adash','ausers','areqs'].includes(g))await load()}
   return go(g)}
  if(d.act)return ACTS[d.act]();
  if(d.appr)return decide(d.appr,'verified','Resident approved','Your residency is verified. You can now file requests.');
  if(d.rej)return decide(d.rej,'rejected','Resident rejected','We couldn’t verify your residency. Check your details and submit again.');
+ if(d.edituser){ui.edit=d.edituser;return go('edituser')}
+ if(d.editreq){ui.edit=d.editreq;return go('editreq')}
+ if(d.delreq){if(!confirm('Delete this request permanently?'))return;const x=await sb.from('requests').delete().eq('id',d.delreq);if(x.error)return toast(x.error.message);await load();render();return toast('Request deleted')}
+ if(d.deluser){if(!confirm('Delete this account and all its requests permanently?'))return;const x=await sb.rpc('admin_delete_user',{target:d.deluser});if(x.error)return toast(x.error.message);await load();render();return toast('Account deleted')}
  const r=S.reqs.find(x=>String(x.id)===d.adv),f=FLOW[r.type]||FLOW.Clearance,n=f[f.indexOf(r.status)+1];
  const u=await sb.from('requests').update({status:n}).eq('id',r.id);if(u.error)return toast(u.error.message);
  await notify(r.user_id,`${r.ref} is now: ${n}.`);await load();render();toast(`${r.ref} → ${n}`)
  }catch(x){toast(msg(x))}});
+document.addEventListener('change',async e=>{const s=e.target;if(!s.dataset.role)return;const r=await sb.from('profiles').update({role:s.value}).eq('id',s.dataset.role);if(r.error)toast(r.error.message);else toast('Role updated');await load();render()});
 document.addEventListener('visibilitychange',async()=>{if(!document.hidden&&S.p&&!document.querySelector('form')&&!['splash'].includes(ui.screen)){await load();render()}});
 render();boot();
 
