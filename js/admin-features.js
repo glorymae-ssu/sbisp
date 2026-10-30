@@ -129,10 +129,13 @@ export const renderAnnouncements = list => list.map(a =>
 export async function mountAnnouncementsAdmin(el) {
   const { data, error } = await supabase.from('announcements').select('*').order('created_at', { ascending: false });
   if (error) { el.innerHTML = box('er', esc(error.message)); return; }
+  const { data: pks } = await supabase.from('puroks').select('name').order('sort');
   const today = new Date().toISOString().slice(0, 10), plus14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
   el.innerHTML = card('<b>New announcement</b>'
       + input('an-t', 'Title') + `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="an-b">Message</label><textarea id="an-b" style="width:100%;min-height:80px;padding:11px;border:1px solid #C9D2DC;border-radius:10px"></textarea>`
-      + input('an-p', 'Audience (leave empty for all residents, or type a Purok, e.g. Purok 3)')
+      + `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="an-p">Audience</label>
+         <select id="an-p" style="width:100%;padding:11px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px">
+         <option value="">All residents</option>${(pks || []).map(p => `<option value="${esc(p.name)}">${esc(p.name)} only</option>`).join('')}</select>`
       + input('an-f', 'Show from', today, 'date') + input('an-u', 'Show until', plus14, 'date')
       + button('Post Announcement', 'an-save') + '<div id="an-msg"></div>')
     + (data.map(a => card(`<b>${esc(a.title)}</b><small style="display:block">${esc(a.purok || 'All residents')} · ${esc(a.show_from)} to ${esc(a.show_until)}</small>
@@ -178,8 +181,8 @@ const LISTS = ['All living residents', 'Registered Voters', 'Non-registered Vote
   'Youth (15-30)', 'In-School Youth', 'Out-of-School Youth', 'Children (below 15)', 'Registered SK Voters',
   'Social Pensioners (LGU)', 'SSS Pensioners', 'New Residents', 'Deceased'];
 export async function mountMasterlists(el) {
-  const { data: pk } = await supabase.from('population_registry').select('purok');
-  const puroks = [...new Set((pk || []).map(x => x.purok).filter(Boolean))].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  const { data: pk } = await supabase.rpc('list_puroks');     // secured function: admin / Punong Barangay only
+  const puroks = (pk || []).map(x => x.purok);
   const sel = (id, label, opts) => `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="${id}">${label}</label>
     <select id="${id}" style="width:100%;padding:11px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px">${opts.map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
   el.innerHTML = sel('ml-t', 'List', LISTS) + sel('ml-p', 'Purok', ['All Puroks', ...puroks]) + '<div id="ml-out" style="margin-top:12px;overflow-x:auto"></div>';
