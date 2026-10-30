@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SBISP Admin Features Test</title>
+<style>body{font-family:Inter,system-ui,sans-serif;background:#F4F6F9;margin:0;padding:16px;max-width:520px;margin:auto}
+h2{color:#0F6B3A}section{margin-bottom:28px}button.tab{padding:8px 12px;border:0;border-radius:99px;background:#fff;margin:0 6px 8px 0;cursor:pointer}
+button.tab.on{background:#0F6B3A;color:#fff}</style></head>
+<body>
+<h2>SBISP Admin Features (test page)</h2>
+<div id="login">
+  <input id="em" type="email" placeholder="Admin email" style="width:100%;padding:10px;margin:4px 0">
+  <input id="pw" type="password" placeholder="Password" style="width:100%;padding:10px;margin:4px 0">
+  <button id="go" style="width:100%;padding:12px;background:#0F6B3A;color:#fff;border:0;border-radius:10px">Log in</button>
+  <p id="err" style="color:#D32F2F"></p>
+</div>
+<div id="app" hidden>
+  <div id="tabs"></div>
+  <section id="view"></section>
+</div>
+<script type="module">
+import { supabase } from './js/supabaseClient.js';
+import { mountAnalytics, mountAnnouncementsAdmin, mountFeeSchedule, mountMasterlists, mountUpcomingHearings } from './js/admin-features.js';
+
+const views = { Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule,
+                Masterlists: mountMasterlists, Hearings: mountUpcomingHearings };
+
+function show(name) {
+  document.querySelectorAll('button.tab').forEach(b => b.classList.toggle('on', b.textContent === name));
+  views[name](document.getElementById('view'));
+}
+async function start() {
+  document.getElementById('login').hidden = true; document.getElementById('app').hidden = false;
+  const tabs = document.getElementById('tabs');
+  Object.keys(views).forEach(n => { const b = document.createElement('button'); b.className = 'tab'; b.textContent = n; b.onclick = () => show(n); tabs.appendChild(b); });
+  show('Analytics');
+}
+document.getElementById('go').onclick = async () => {
+  const { error } = await supabase.auth.signInWithPassword({ email: document.getElementById('em').value, password: document.getElementById('pw').value });
+  if (error) document.getElementById('err').textContent = error.message; else start();
+};
+if ((await supabase.auth.getSession()).data.session) start();
+</script>
+</body></html>
