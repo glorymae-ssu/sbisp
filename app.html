@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SBISP - Smart Barangay Information and Service Portal</title>
+<style>
+:root{--p:#0F6B3A;--g:linear-gradient(135deg,#0B5D33,#2FAE5F);--s:#E4F5EA;--bg:#F4F6F9;--er:#D32F2F;--wa:#E8890C;--mu:#66707D;--tx:#1B2430}
+*{box-sizing:border-box;margin:0;font-family:Inter,Roboto,system-ui,sans-serif}
+body{background:#DDE5EE;color:var(--tx)}
+#app{max-width:480px;min-height:100vh;margin:auto;background:var(--bg);box-shadow:0 8px 30px #0003}
+.wrap{padding:18px}.top{background:var(--g);color:#fff;padding:16px;display:flex;align-items:center;gap:10px}
+.top h2{flex:1;font-size:18px}.top small{display:block;font-weight:600}.top button{background:none;border:0;color:#fff;font-size:20px;cursor:pointer}
+h1{color:var(--p);text-align:center;margin:6px 0}h2{color:var(--p)}p.muted,.muted{color:var(--mu);font-size:13px;margin:8px 0}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 4px}
+input,select,textarea{width:100%;padding:12px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px;background:#fff}
+textarea{min-height:80px}
+.btn{width:100%;padding:13px;border:0;border-radius:10px;background:var(--g);color:#fff;font-weight:600;font-size:15px;margin-top:10px;cursor:pointer}
+.btn.sec{background:var(--s);color:var(--p)}.btn.er{background:var(--er)}
+.card{background:#fff;border-radius:12px;padding:14px;margin:10px 0;box-shadow:0 1px 3px #0001}
+.row{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #EEF1F4;font-size:14px}.row span:first-child{color:var(--mu)}
+.bd{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12px;font-weight:700}
+.bd.ok{background:#E3F5EA;color:#1E8E4E}.bd.wa{background:#FFF0DC;color:#B96A00}.bd.er{background:#FDE6E6;color:var(--er)}.bd.bl{background:var(--s);color:var(--p)}
+.msg{padding:11px;border-radius:10px;font-size:13px;margin:10px 0;background:var(--s)}.msg.er{background:#FDE6E6}.msg.wa{background:#FFF0DC}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:10px 14px}.tabs button{padding:8px 13px;border:0;border-radius:99px;background:#fff;font-size:13px;cursor:pointer;white-space:nowrap}
+.tabs button.on{background:var(--p);color:#fff}
+.item{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer}.item small{display:block;color:var(--mu)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.soon{opacity:.55;text-align:center;padding:16px 6px;font-weight:600}
+a{color:var(--p)}
+</style></head>
+<body>
+<div id="app"><p style="padding:20px">Loading…</p></div>
+<script type="module" src="js/app.js"></script>
+</body></html>
