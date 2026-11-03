@@ -25,6 +25,16 @@ textarea{min-height:80px}
 .item{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer}.item small{display:block;color:var(--mu)}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.soon{opacity:.55;text-align:center;padding:16px 6px;font-weight:600}
 a{color:var(--p)}
+/* Staff screens (the ones with tabs) use the wider tablet and computer screens. Phones and the resident side are unchanged. */
+@media(min-width:768px){
+#app:has(#tabs){max-width:1100px}
+#app:has(#tabs) .wrap{padding:24px 28px}
+#app:has(#tabs) .tabs{padding:12px 28px}
+#app:has(#tabs) input,#app:has(#tabs) select,#app:has(#tabs) textarea,#app:has(#tabs) .btn{max-width:560px}
+#ac-sum .card{max-width:480px}
+#ac-list{display:grid;grid-template-columns:repeat(2,1fr);gap:0 14px;align-items:start}
+}
+@media(min-width:1000px){#ac-list{grid-template-columns:repeat(3,1fr)}}
 </style></head>
 <body>
 <div id="app"><p style="padding:20px">Loading…</p></div>
