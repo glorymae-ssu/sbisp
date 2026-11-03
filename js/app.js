@@ -6,6 +6,7 @@
 import { supabase } from './supabaseClient.js';
 import { esc, mountAnalytics, mountAnnouncementsAdmin, mountFeeSchedule, mountMasterlists,
          mountUpcomingHearings, loadActiveAnnouncements, renderAnnouncements } from './admin-features.js';
+import { mountAccounts } from './accounts.js';
 
 const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
@@ -44,10 +45,11 @@ const fatal = t => { show(`<div class="wrap">${msg(esc(t), 'er')}<button id="lo"
 async function logout() { await supabase.auth.signOut(); me = null; login(); }
 
 /* ------------------------------------------------------------------ login */
-function login(err = '') {
+function login(err = '', ok = '') {
   show(`<div class="wrap"><h1>SBISP</h1><p class="muted" style="text-align:center">Smart Barangay Information and Service Portal<br>Barangay Guinsorongan, Catbalogan City</p>
-    ${err ? msg(esc(err), 'er') : ''}${field('lg-u', 'Mobile number or email', '', 'text', '09XXXXXXXXX')}${field('lg-p', 'Password', '', 'password')}
-    <button id="lg-go" class="btn">LOG IN</button><button id="lg-new" class="btn sec">CREATE ACCOUNT</button></div>`);
+    ${err ? msg(esc(err), 'er') : ''}${ok ? msg(esc(ok)) : ''}${field('lg-u', 'Mobile number or email', '', 'text', '09XXXXXXXXX')}${field('lg-p', 'Password', '', 'password')}
+    <button id="lg-go" class="btn">LOG IN</button><button id="lg-new" class="btn sec">CREATE ACCOUNT</button>
+    <p style="text-align:center;margin-top:14px"><a href="#" id="lg-fp">Forgot password?</a></p></div>`);
   $('lg-go').onclick = async () => {
     const u = v('lg-u').trim(), email = u.includes('@') ? u : mobEmail(u.replace(/\D/g, ''));
     const { error } = await supabase.auth.signInWithPassword({ email, password: v('lg-p') });
@@ -55,6 +57,7 @@ function login(err = '') {
     boot();
   };
   $('lg-new').onclick = () => reg1();
+  $('lg-fp').onclick = e => { e.preventDefault(); forgot(); };
 }
 
 /* ------------------------------------------------------------------ create account (2 steps) */
@@ -92,6 +95,42 @@ async function createAccount() {
     p_mobile: d.mobile, p_birthdate: d.birth, p_sex: d.sex, p_civil: d.civil });
   if (e2) return reg1(e2.message);
   draft = {}; boot();
+}
+
+/* ------------------------------------------------------------------ forgot password (3 steps) */
+let fp = {};
+function forgot(err = '') {
+  show(`<div class="wrap"><a href="#" id="bk">‹ Back to login</a><h2>Forgot Password</h2>
+    <p class="muted">Enter the mobile number you registered with and your date of birth so we can confirm it is you.</p>${err ? msg(esc(err), 'er') : ''}
+    ${field('f-mo', 'Mobile Number', fp.mobile, 'tel', '09XXXXXXXXX')}${field('f-b', 'Date of Birth', fp.birth, 'date')}
+    <button id="f-go" class="btn">CONTINUE</button></div>`);
+  $('bk').onclick = e => { e.preventDefault(); login(); };
+  $('f-go').onclick = () => {
+    fp = { mobile: v('f-mo').trim(), birth: v('f-b') };
+    if (!/^09\d{9}$/.test(fp.mobile) || !fp.birth) return forgot('Enter your 11-digit mobile number and date of birth.');
+    forgotOtp();
+  };
+}
+function forgotOtp(err = '') {
+  show(`<div class="wrap"><a href="#" id="bk">‹ Back</a><h2>Verify Your Mobile Number</h2>
+    <p class="muted">We sent a verification code to ${esc(fp.mobile)}.</p>${err ? msg(esc(err), 'er') : ''}
+    ${msg('Simulated OTP for this system: <b>123456</b>. No real SMS is sent.', 'wa')}${field('o-c', '6-digit code', '', 'text', '123456')}
+    <button id="o-go" class="btn">VERIFY</button></div>`);
+  $('bk').onclick = e => { e.preventDefault(); forgot(); };
+  $('o-go').onclick = () => (v('o-c').trim() === '123456' ? forgotNew() : forgotOtp('Incorrect code. Please try again.'));
+}
+function forgotNew(err = '') {
+  show(`<div class="wrap"><h2>Create a New Password</h2>${err ? msg(esc(err), 'er') : ''}
+    ${field('n-p', 'New Password', '', 'password', 'At least 6 characters')}${field('n-p2', 'Confirm New Password', '', 'password')}
+    <button id="n-go" class="btn">SAVE NEW PASSWORD</button></div>`);
+  $('n-go').onclick = async () => {
+    const a = v('n-p');
+    if (a.length < 6) return forgotNew('Password must be at least 6 characters.');
+    if (a !== v('n-p2')) return forgotNew('The two passwords do not match.');
+    const { error } = await supabase.rpc('reset_password_self', { p_mobile: fp.mobile, p_birthdate: fp.birth, p_new: a });
+    if (error) return forgot(error.message);
+    fp = {}; login('', 'Password changed. You can now log in with your new password.');
+  };
 }
 
 /* ------------------------------------------------------------------ residency registration */
@@ -175,12 +214,12 @@ async function home() {
 /* ------------------------------------------------------------------ staff shell */
 async function staff() {
   const admin = me.role === 'admin';
-  const tabs = admin ? ['Residents', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Hearings']
+  const tabs = admin ? ['Residents', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Hearings']
     : me.role === 'employee' ? ['Residents', 'Hearings'] : ['Hearings'];
   show(`<div class="top"><h2>${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!<small>${esc(roleLabel(me))}${me.is_pb ? ' (view-only)' : ''}</small></h2><button id="lo" title="Log out">⎋</button></div>
     <div class="tabs" id="tabs">${tabs.map(t => `<button data-t="${t}">${t}</button>`).join('')}</div><div class="wrap" id="pane"></div>`);
   $('lo').onclick = logout;
-  const views = { Residents: residentsTab, Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule,
+  const views = { Residents: residentsTab, Accounts: mountAccounts, Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule,
     Masterlists: mountMasterlists, Hearings: mountUpcomingHearings };
   const open = t => { document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); views[t]($('pane')); };
   document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => open(b.dataset.t); });
