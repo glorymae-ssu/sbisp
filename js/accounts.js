@@ -14,7 +14,7 @@ const when = d => (d ? new Date(d).toLocaleString('en-PH') : 'Never');
 const msg = (t, k = '') => `<div class="msg ${k}">${esc(t)}</div>`;
 
 export async function mountAccounts(el) {
-  el.innerHTML = `<div id="ac-sum"></div>
+  el.innerHTML = `<div id="ac-sum"></div><button class="btn" id="ac-add">+ ADD STAFF ACCOUNT</button><div id="ac-form"></div>
     <input id="ac-q" placeholder="Search name, mobile or email" style="margin-top:8px">
     <select id="ac-f" style="margin-top:8px"><option value="all">All accounts</option><option value="resident">Residents</option>
       <option value="staff">Staff and administrators</option><option value="off">Deactivated</option></select>
@@ -70,6 +70,39 @@ export async function mountAccounts(el) {
     else { note = msg(ok); await load(); }
     draw();
   };
+
+  // ---- add a staff account (Secretary, employees, kagawad, SK, treasurer, administrator) without opening Supabase
+  const addForm = () => {
+    const box = el.querySelector('#ac-form'), q2 = s => box.querySelector(s);
+    box.innerHTML = `<div class="card"><b>New staff account</b><div id="n-msg"></div>
+      <label>Full name</label><input id="n-name" placeholder="e.g. Celin Pestolane">
+      <label>Mobile number (used to log in)</label><input id="n-mo" type="tel" placeholder="09XXXXXXXXX">
+      <label>Role</label><select id="n-role"><option value="employee">Barangay Secretary / Employee</option><option value="kagawad">Barangay Kagawad</option>
+        <option value="skchair">SK Chairperson</option><option value="treasurer">Barangay Treasurer</option><option value="admin">Administrator</option></select>
+      <label>Temporary password</label><input id="n-pw" type="text" placeholder="At least 6 characters">
+      <button class="btn" id="n-go">CREATE ACCOUNT</button><button class="btn sec" id="n-cancel">CANCEL</button></div>`;
+    q2('#n-cancel').onclick = () => { box.innerHTML = ''; };
+    q2('#n-go').onclick = async () => {
+      const name = q2('#n-name').value.trim(), mob = q2('#n-mo').value.trim(), pw = q2('#n-pw').value, role = q2('#n-role').value;
+      const fail = t => { q2('#n-msg').innerHTML = msg(t, 'er'); };
+      if (!name) return fail('Enter the full name.');
+      if (!/^09\d{9}$/.test(mob)) return fail('Enter a valid 11-digit mobile number (09XXXXXXXXX).');
+      if (pw.length < 6) return fail('The password must be at least 6 characters.');
+      if (!supabase.supabaseUrl || !supabase.supabaseKey) return fail('Could not read the project settings. Create the login in Supabase instead.');
+      const email = mob + '@sbisp-guinsorongan.app';
+      // sign-up goes straight to the auth service so the administrator stays logged in
+      const r = await fetch(`${supabase.supabaseUrl}/auth/v1/signup`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: supabase.supabaseKey }, body: JSON.stringify({ email, password: pw }) });
+      const j = await r.json().catch(() => ({}));
+      const why = j.msg || j.error_description || j.message || '';
+      if (!r.ok && !/registered|exists/i.test(why)) return fail(why || 'The login could not be created.');
+      const { error } = await supabase.rpc('admin_create_staff', { p_email: email, p_name: name, p_mobile: mob, p_role: role });
+      if (error) return fail(error.message);
+      box.innerHTML = ''; note = msg(`Account created for ${name}. They log in with ${mob} and the temporary password.`);
+      await load(); draw();
+    };
+  };
+  el.querySelector('#ac-add').onclick = addForm;
 
   el.querySelector('#ac-q').oninput = e => { q = e.target.value.trim().toLowerCase(); draw(); };
   el.querySelector('#ac-f').onchange = e => { f = e.target.value; draw(); };
