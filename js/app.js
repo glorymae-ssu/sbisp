@@ -46,10 +46,17 @@ async function logout() { await supabase.auth.signOut(); me = null; login(); }
 
 /* ------------------------------------------------------------------ login */
 function login(err = '', ok = '') {
-  show(`<div class="wrap"><h1>SBISP</h1><p class="muted" style="text-align:center">Smart Barangay Information and Service Portal<br>Barangay Guinsorongan, Catbalogan City</p>
-    ${err ? msg(esc(err), 'er') : ''}${ok ? msg(esc(ok)) : ''}${field('lg-u', 'Mobile number or email', '', 'text', '09XXXXXXXXX')}${field('lg-p', 'Password', '', 'password')}
-    <button id="lg-go" class="btn">LOG IN</button><button id="lg-new" class="btn sec">CREATE ACCOUNT</button>
-    <p style="text-align:center;margin-top:14px"><a href="#" id="lg-fp">Forgot password?</a></p></div>`);
+  const eye = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+  show(`<div class="lg"><div class="lg-hero"><h1>Welcome</h1><p>Sign in to request clearances and report complaints</p></div>
+    <div class="lg-card"><img src="logo.png" alt="SBISP" class="lg-logo">${err ? msg(esc(err), 'er') : ''}${ok ? msg(esc(ok)) : ''}
+      <label for="lg-u">MOBILE NUMBER OR EMAIL</label><input id="lg-u" type="text" placeholder="09XXXXXXXXX or email" autocomplete="username">
+      <label for="lg-p">PASSWORD</label><div class="pw"><input id="lg-p" type="password" placeholder="Password" autocomplete="current-password"><button type="button" id="lg-eye" aria-label="Show or hide password">${eye}</button></div>
+      <a href="#" id="lg-fp" class="lg-fp">Forgot Password?</a>
+      <button id="lg-go" class="btn">Login</button></div>
+    <div class="lg-or"><span>New to Barangay Portal?</span></div>
+    <div class="lg-reg"><button id="lg-new" class="btn out">Register Account</button></div></div>`);
+  $('lg-eye').onclick = () => { $('lg-p').type = $('lg-p').type === 'password' ? 'text' : 'password'; };
+  $('lg-p').onkeydown = e => { if (e.key === 'Enter') $('lg-go').click(); };
   $('lg-go').onclick = async () => {
     const u = v('lg-u').trim(), email = u.includes('@') ? u : mobEmail(u.replace(/\D/g, ''));
     const { error } = await supabase.auth.signInWithPassword({ email, password: v('lg-p') });
