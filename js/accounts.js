@@ -9,7 +9,7 @@ import { esc } from './admin-features.js';
 
 const ROLE = { admin: 'Administrator', employee: 'Barangay Employee', kagawad: 'Barangay Kagawad',
   skchair: 'SK Chairperson', treasurer: 'Barangay Treasurer', resident: 'Resident' };
-const STAT = { unverified: 'Not submitted', pending: 'Pending', verified: 'Verified', correction: 'Needs correction', declined: 'Declined' };
+const STAT = { new: 'Registry not started', unverified: 'Not submitted', pending: 'Pending', verified: 'Verified', correction: 'Needs correction', declined: 'Declined' };
 const when = d => (d ? new Date(d).toLocaleString('en-PH') : 'Never');
 const msg = (t, k = '') => `<div class="msg ${k}">${esc(t)}</div>`;
 
@@ -40,7 +40,7 @@ export async function mountAccounts(el) {
     el.querySelector('#ac-list').innerHTML = list.map(r => {
       const self = r.id === myId, isAdmin = r.role === 'admin';
       return `<div class="card" data-id="${r.id}" style="cursor:pointer"><div class="item"><div><b>${esc(r.full_name || '(no name)')}</b>
-        <small>${esc(r.role === 'resident' ? (r.mobile || '—') : (r.email || r.mobile || '—'))}</small></div>
+        <small>${esc(r.role === 'resident' ? (r.mobile || r.email || '—') : (r.email || r.mobile || '—'))}</small></div>
         <span class="bd ${r.active ? 'ok' : 'er'}">${r.active ? 'Active' : 'Deactivated'}</span></div>
         ${open === r.id ? `<div style="margin-top:8px">${[['Role', ROLE[r.role] || r.role], ['Residency', r.role === 'resident' ? (STAT[r.status] || r.status) : '—'],
           ['Registered', when(r.created_at)], ['Last login', when(r.last_sign_in_at)]].map(([a, b]) => `<div class="row"><span>${a}</span><b>${esc(b)}</b></div>`).join('')}
