@@ -37,11 +37,11 @@ export async function boot() {
   if (!session) return login();
   acct = session.user;
   const { data: p } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
-  if (!p) { me = null; return pre(); }                      // account created, resident registry not done yet
+  if (!p) { me = null; return home(); }                     // account created, resident registry not done yet
   if (!p.active) return fatal('This account is deactivated. Please contact the Barangay Hall.');
   me = p; supabase.rpc('touch_login');
   if (me.role !== 'resident') return staff();
-  return me.status === 'unverified' ? pre() : home();
+  return home();
 }
 const fatal = t => { show(`<div class="wrap">${msg(esc(t), 'er')}<button id="lo" class="btn">LOG OUT</button></div>`); $('lo').onclick = logout; };
 async function logout() { await supabase.auth.signOut(); me = null; login(); }
@@ -308,7 +308,7 @@ async function rg1(err = '') {
     <button id="g-go" class="btn">Continue</button>${rgFoot}`);
   const save = () => Object.assign(rg, { first: v('g-f').trim(), middle: v('g-m').trim(), last: v('g-l').trim(), birth: v('g-b'), sex: v('g-s'), civil: v('g-c'),
     mobile: cleanMobile(v('g-mo')), email: v('g-em').trim(), street: v('g-st').trim(), purok: v('g-pu') });
-  $('rg-bk').onclick = e => { e.preventDefault(); if (me && me.status !== 'unverified') home(); else pre(); };
+  $('rg-bk').onclick = e => { e.preventDefault(); home(); };
   $('g-go').onclick = () => {
     save();
     if (!rg.first || !rg.last || !rg.birth) return rg1('First name, last name and date of birth are required.');
@@ -343,11 +343,12 @@ function rg2(err = '') {
     rg3();
   };
 }
+const ID_TYPES = { 'image/png': 'png', 'image/jpeg': 'jpg', 'application/pdf': 'pdf' };
 function rg3(err = '') {
   show(`${rgHead(3, 'Identity Verification')}${err ? msg(esc(err), 'er') : ''}<div class="rg-card">
     ${sel2('g-it', 'VALID ID', IDS, rg.id_type)}${lab('g-in', 'ID NUMBER')}<input id="g-in" value="${esc(rg.id_number)}">
-    ${lab('g-fl', 'UPLOAD ID/SUPPORTING DOCUMENT')}<div class="rg-drop" id="g-drop"><div style="font-size:26px">📄</div><div id="g-fn">${idFile ? esc(idFile.name) : rg.id_path ? 'ID already uploaded. Tap to replace it.' : 'Choose a clear photo or PDF'}</div></div>
-    <input id="g-file" type="file" accept="image/*,application/pdf" hidden>
+    ${lab('g-fl', 'UPLOAD ID/SUPPORTING DOCUMENT')}<div class="rg-drop" id="g-drop"><div style="font-size:26px">📄</div><div id="g-fn">${idFile ? esc(idFile.name) : rg.id_path ? 'ID already uploaded. Tap to replace it.' : 'Choose a clear photo (JPEG or PNG) or PDF, up to 5 MB'}</div></div>
+    <input id="g-file" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" hidden>
     <label class="rg-consent"><input type="checkbox" id="g-cs" ${rg.consent ? 'checked' : ''}> I confirm that the information provided is accurate and I consent to its use for barangay registration and service records.</label></div>
     <button id="g-back" class="btn out2">Back</button><button id="g-go" class="btn">Submit Registration</button>${rgFoot}`);
   const save = () => { rg.id_type = v('g-it'); rg.id_number = v('g-in').trim(); rg.consent = $('g-cs').checked; };
@@ -357,7 +358,7 @@ function rg3(err = '') {
   $('g-file').onchange = e => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 5 * 1024 * 1024) return rg3('The file is too large. Please choose a photo or PDF under 5 MB.');
-    if (!/^(image\/|application\/pdf)/.test(f.type)) return rg3('Please choose a photo or a PDF.');
+    if (!ID_TYPES[f.type] && !/\.(png|jpe?g|pdf)$/i.test(f.name)) return rg3('Please choose a PNG, JPEG or PDF file.');
     save(); idFile = f; rg3();
   };
   $('g-go').onclick = async () => {
@@ -368,9 +369,9 @@ function rg3(err = '') {
     $('g-go').disabled = true; $('g-go').textContent = 'Submitting…';
     let path = rg.id_path;
     if (idFile) {
-      const ext = (idFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const ext = ID_TYPES[idFile.type] || (idFile.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').replace('jpeg', 'jpg') || 'jpg';
       path = `${acct.id}/id-${Date.now()}.${ext}`;
-      const up = await supabase.storage.from('resident-ids').upload(path, idFile, { contentType: idFile.type });
+      const up = await supabase.storage.from('resident-ids').upload(path, idFile, { contentType: idFile.type || (ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : 'image/jpeg') });
       if (up.error) return rg3('Could not upload your ID: ' + up.error.message);
     }
     const a = age(rg.birth) ?? 0;
@@ -383,49 +384,101 @@ function rg3(err = '') {
     show(`<div class="wrap" style="text-align:center"><div style="font-size:56px">✅</div><h2>Registration Submitted</h2>
       <div class="card">${row('Reference No.', esc(ref))}${row('Status', badge('pending'))}</div>
       <p class="muted">Your information was submitted for barangay verification. You will be notified once it is verified.</p><button id="x-home" class="btn">GO TO HOME</button></div>`);
-    $('x-home').onclick = home;
+    $('x-home').onclick = () => home();
   };
 }
 
-/* ------------------------------------------------------------------ resident home */
-async function home() {
+/* ------------------------------------------------------------------ shared pieces (icons, header) */
+const ICO = {
+  complaint: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h6"/>', track: '<path d="M12 21s7-6.2 7-11a7 7 0 0 0-14 0c0 4.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>',
+  alert: '<path d="M6 17v-6a6 6 0 0 1 12 0v6l2 2H4z"/><path d="M10 21h4"/>', stats: '<path d="M5 20v-8M10 20V6M15 20v-10M20 20V3"/>',
+  reg: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M12 18v-6M9.5 14.5 12 12l2.5 2.5"/>', svc: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 14l2 2 4-4"/>',
+  users: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6"/><circle cx="17" cy="9" r="2.4"/><path d="M16 14.2c3 .2 5 2.2 5 5.3"/>',
+  key: '<circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M16 6l3 3M14 8l2 2"/>', mega: '<path d="M3 11v3h4l8 5V6L7 11z"/><path d="M18 9a4 4 0 0 1 0 6"/>',
+  coin: '<circle cx="12" cy="12" r="9"/><path d="M12 7v10M9.5 9.5h4a1.8 1.8 0 0 1 0 3.5h-3a1.8 1.8 0 0 0 0 3.5H15"/>', list: '<path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/>',
+  org: '<rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/>',
+  cal: '<rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 10h16M9 3v4M15 3v4"/>', home: '<path d="M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>', out: '<path d="M10 4H5v16h5M15 8l4 4-4 4M9 12h10"/>' };
+const ico = (n, c = 'currentColor', z = 22) => `<svg width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICO[n]}</svg>`;
+const initials = n => (String(n || '').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('') || 'U').toUpperCase();
+const hdr = (name, title, sub, right = '', extra = '') => `<div class="hdr"><div class="hdr-row"><div class="av">${esc(initials(name))}</div>
+  <div class="hdr-t"><b>${title}</b><span>${sub}</span></div>${right}</div>${extra}</div>`;
+const tile = (k, label, icon, color) => `<button class="qa-t" data-k="${esc(k)}"><span class="qa-i">${ico(icon, color)}</span><span class="qa-l" style="color:${color}">${esc(label)}</span></button>`;
+const CL_NAVY = '#0B2A8A', CL_GREEN = '#1F7A14', CL_ORANGE = '#E8782A';
+
+/* ------------------------------------------------------------------ resident home (Canva page 10) */
+const resName = () => me ? (me.first_name || (me.full_name || '').split(' ')[0])
+  : (acct.user_metadata?.username || ((acct.email || '').endsWith('@sbisp-guinsorongan.app') ? '' : (acct.email || '').split('@')[0]));
+const regDone = () => !!me && me.status !== 'unverified';
+const lockMsg = () => me?.status === 'verified' ? 'This service is coming in the next update.'
+  : regDone() ? 'Services unlock once the barangay verifies your residency.' : 'Complete your resident registration to unlock this service.';
+const regEntry = () => { if (!regDone() || me.status === 'correction') { if (me) me.status = me.status === 'correction' ? 'correction' : 'unverified'; regStart(); } else home('profile'); };
+
+async function home(tab = 'home') {
+  const uid = acct.id, name = resName() || 'Ka-Barangay';
   const [ann, nt] = await Promise.all([loadActiveAnnouncements(),
-    supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(15)]);
-  const first = me.first_name || (me.full_name || '').split(' ')[0];
-  const notes = (nt.data || []);
-  show(`<div class="top"><h2>${greeting()}, ${esc(first)}!<small>Barangay Guinsorongan</small></h2><button id="lo" title="Log out">⎋</button></div><div class="wrap">
-    <div class="card"><small class="muted">Resident Status</small><div style="margin:6px 0">${badge(me.status)}</div>
-      ${me.status === 'pending' ? '<p class="muted">Services unlock once the barangay verifies your residency.</p>' : ''}
-      ${me.reference_no ? `<p class="muted">Reference: ${esc(me.reference_no)}</p>` : ''}
-      ${['correction', 'declined'].includes(me.status) ? msg('Barangay note: ' + esc(me.review_note || ''), 'er') : ''}
-      ${me.status === 'correction' ? '<button id="fix" class="btn">UPDATE INFORMATION</button>' : ''}</div>
-    ${renderAnnouncements(ann)}
-    <h3 style="margin-top:14px;color:var(--p)">Barangay Services</h3>
-    <div class="grid">${['Complaints', 'Certificates', 'My Requests', 'Voter Information'].map(s => `<div class="card soon">${s}<br><small class="muted">${me.status === 'verified' ? 'Coming in the next update' : 'Locked until verified'}</small></div>`).join('')}</div>
-    <h3 style="margin-top:14px;color:var(--p)">Notifications</h3>
-    ${notes.map(n => `<div class="card">${esc(n.text)}<small class="muted" style="display:block">${new Date(n.created_at).toLocaleString('en-PH')}</small></div>`).join('') || '<p class="muted">No notifications yet.</p>'}
-    <p class="lg-org"><a href="#" id="org">View Barangay Organizational Structure</a></p></div>`);
-  $('lo').onclick = logout;
-  $('org').onclick = e => { e.preventDefault(); orgPage(boot); };
-  if ($('fix')) $('fix').onclick = async () => {                       // allow re-submission after correction
-    me.status = 'correction'; regStart();
-  };
-  if (notes.some(n => !n.read)) supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false);
+    supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(15)]);
+  const notes = nt.data || [], unread = notes.some(n => !n.read);
+  const TITLES = { complaints: 'Complaints', analytics: 'Community Stats', alerts: 'Alerts & News', profile: 'My Profile', services: 'Barangay Services' };
+  const bell = `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}${unread ? '<span class="dot"></span>' : ''}</button>`;
+  const search = `<div class="srch"><input id="sq" placeholder="Search services…" autocomplete="off">${ico('search', CL_GREEN, 20)}</div>`;
+  const head = tab === 'home' ? hdr(name, 'Maupay nga Adlaw!', `Welcome, ${esc(name)}!`, bell, search)
+    : hdr(name, esc(TITLES[tab] || ''), 'Barangay Guinsorongan', bell);
+
+  const banner = !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
+    : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p></div>`
+    : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>` : '';
+  const locked = t => `<div class="card"><b>${t}</b><p class="muted">${lockMsg()}</p>${regDone() ? '' : '<button class="btn" id="reg-now">REGISTER NOW</button>'}</div>`;
+  const body = {
+    home: `${banner}<div class="qa-h">Quick Actions</div><div class="qa" id="qa">${tile('complaints', 'Submit Complaint', 'complaint', CL_NAVY)}${tile('complaints', 'Track Complaint', 'track', CL_GREEN)}
+      ${tile('alerts', 'Alerts & News', 'alert', CL_ORANGE)}${tile('analytics', 'Community Stats', 'stats', CL_GREEN)}${tile('reg', 'Resident Registration', 'reg', CL_NAVY)}${tile('services', 'Barangay Services', 'svc', CL_GREEN)}</div>
+      <div class="qa-h"><span>RECENT COMPLAINTS &amp; TRANSACTIONS</span></div><div class="card"><p class="muted">No complaints or requests yet.</p></div>
+      <p class="org-link"><a href="#" id="org">View Barangay Organizational Structure</a></p>`,
+    complaints: locked('Complaints'), services: locked('Barangay Services'), analytics: `<div class="card"><b>Community Stats</b><p class="muted">Community statistics are coming in the next update.</p></div>`,
+    alerts: `${renderAnnouncements(ann)}<div class="qa-h"><span>Notifications</span></div>`
+      + (notes.map(n => `<div class="card">${esc(n.text)}<small class="muted" style="display:block">${new Date(n.created_at).toLocaleString('en-PH')}</small></div>`).join('') || '<p class="muted">No notifications yet.</p>'),
+    profile: `<div class="card">${row('Name', esc(me ? me.full_name : (resName() || '—')))}${row('Login', esc(me?.mobile || (acct.email || '').replace('@sbisp-guinsorongan.app', '') || '—'))}
+      ${row('Resident status', me ? badge(me.status) : badge('unverified'))}${me?.reference_no ? row('Reference', esc(me.reference_no)) : ''}</div>
+      <button class="btn" id="reg-now">${regDone() ? 'VIEW REGISTRATION STATUS' : 'RESIDENT REGISTRATION'}</button>
+      <button class="btn sec" id="org">Barangay Organizational Structure</button><button class="btn sec" id="lo">LOG OUT</button>`
+  }[tab];
+  const nav = [['home', 'Home', 'home'], ['complaints', 'Complaints', 'complaint'], ['analytics', 'Analytics', 'stats'], ['alerts', 'Alerts', 'alert'], ['profile', 'Profile', 'user']];
+  show(`${head}<div class="wrap res-pad">${body}</div><nav class="bn">${nav.map(([k, l, i]) => `<button data-n="${k}" class="${tab === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`);
+
+  document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => home(b.dataset.n); });
+  if ($('bell')) $('bell').onclick = () => home('alerts');
+  document.querySelectorAll('.qa-t').forEach(t => { t.onclick = () => (t.dataset.k === 'reg' ? regEntry() : home(t.dataset.k)); });
+  if ($('sq')) $('sq').oninput = e => { const q = e.target.value.trim().toLowerCase(); document.querySelectorAll('.qa-t').forEach(t => { t.style.display = t.textContent.toLowerCase().includes(q) ? '' : 'none'; }); };
+  if ($('reg-now')) $('reg-now').onclick = regEntry;
+  if ($('fix')) $('fix').onclick = () => { me.status = 'correction'; regStart(); };           // allow re-submission after correction
+  if ($('org')) $('org').onclick = e => { e.preventDefault(); orgPage(boot); };
+  if ($('lo')) $('lo').onclick = logout;
+  if (tab === 'alerts' && unread) supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
 }
 
-/* ------------------------------------------------------------------ staff shell */
+/* ------------------------------------------------------------------ staff shell (same look as the resident home) */
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = admin ? ['Residents', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings']
     : me.role === 'employee' ? ['Residents', 'Officials', 'Hearings'] : ['Hearings'];
-  show(`<div class="top"><h2>${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!<small>${esc(roleLabel(me))}${me.is_pb ? ' (view-only)' : ''}</small></h2><button id="lo" title="Log out">⎋</button></div>
-    <div class="tabs" id="tabs">${tabs.map(t => `<button data-t="${t}">${t}</button>`).join('')}</div><div class="wrap" id="pane"></div>`);
-  $('lo').onclick = logout;
+  const ICONS = { Residents: ['users', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY],
+    Masterlists: ['list', CL_GREEN], Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE] };
   const views = { Residents: residentsTab, Accounts: mountAccounts, Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule,
     Masterlists: mountMasterlists, Officials: mountOfficials, Hearings: mountUpcomingHearings };
-  const open = t => { document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === t)); views[t]($('pane')); };
-  document.querySelectorAll('#tabs button').forEach(b => { b.onclick = () => open(b.dataset.t); });
-  open(tabs[0]);
+  const out = `<button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
+  const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out);
+  const open = t => {
+    show(`${head()}<div class="wrap staff"><a href="#" id="sb">${tabs.length > 1 ? '‹ Back to menu' : ''}</a><h3 class="sec-h">${t}</h3><div id="pane"></div></div>`);
+    $('lo').onclick = logout; $('sb').onclick = e => { e.preventDefault(); menu(); };
+    views[t]($('pane'));
+  };
+  const menu = () => {
+    if (tabs.length === 1) return open(tabs[0]);
+    show(`${head()}<div class="wrap staff"><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div></div>`);
+    $('lo').onclick = logout;
+    document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
+  };
+  menu();
 }
 
 async function residentsTab(el, filter = 'pending') {
