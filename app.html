@@ -30,10 +30,10 @@ textarea{min-height:80px}
 a{color:var(--p)}
 /* Staff screens (the ones with tabs) use the wider tablet and computer screens. Phones and the resident side are unchanged. */
 @media(min-width:768px){
-#app:has(#tabs){max-width:1100px}
-#app:has(#tabs) .wrap{padding:24px 28px}
-#app:has(#tabs) .tabs{padding:12px 28px}
-#app:has(#tabs) input,#app:has(#tabs) select,#app:has(#tabs) textarea,#app:has(#tabs) .btn{max-width:560px}
+#app:has(.staff){max-width:1100px}
+#app:has(.staff) .wrap{padding:24px 28px}
+#app:has(.staff) .tabs{padding:12px 28px}
+#app:has(.staff) input,#app:has(.staff) select,#app:has(.staff) textarea,#app:has(.staff) .btn{max-width:560px}
 #ac-sum .card{max-width:480px}
 #ac-list{display:grid;grid-template-columns:repeat(2,1fr);gap:0 14px;align-items:start}
 }
@@ -104,6 +104,26 @@ background:linear-gradient(180deg,#256A13 0%,#2F8F1B 45%,#3FC925 100%);color:#ff
 .og-card.big{background:linear-gradient(135deg,#1F6B12,#34A71C);border:0;min-width:170px}.og-card.big b,.og-card.big small{color:#fff}
 .og-card small.cm{color:#1F7A14;font-weight:600;font-style:italic}.og-card.big small.cm{color:#fff}
 .tbd{color:#9AA29A;font-weight:500;font-style:italic}.og-card.big .tbd{color:#ffffffcc}
+
+/* Green header, Quick Actions tiles and bottom navigation (Canva page 10), used by residents and staff */
+.top h2,.top h2 small{color:#fff}
+.hdr{background:linear-gradient(135deg,#1F6B12,#34B21C);color:#fff;padding:18px 18px 20px;border-radius:0 0 22px 22px}
+.hdr-row{display:flex;align-items:center;gap:12px}
+.av{width:46px;height:46px;border-radius:50%;background:#fff;color:#1F7A14;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:16px;flex:none}
+.hdr-t{flex:1;min-width:0}.hdr-t b{display:block;color:#fff;font-size:18px;font-weight:700}.hdr-t span{display:block;color:#fff;font-size:13px}
+.hdr button{background:none;border:0;color:#fff;cursor:pointer;position:relative;padding:6px}
+.dot{position:absolute;top:3px;right:3px;width:10px;height:10px;border-radius:50%;background:#E53935;border:2px solid #fff}
+.srch{position:relative;margin-top:14px}.srch input{border:0;border-radius:10px;padding:13px 44px 13px 14px;background:#fff;font-style:italic}.srch svg{position:absolute;right:14px;top:50%;transform:translateY(-50%)}
+.qa-h{font-weight:700;color:#0B2A8A;font-size:14px;margin:18px 4px 10px}
+.qa{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.qa-t{background:#fff;border:1px solid #DDEEDA;border-radius:12px;padding:14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:12px;box-shadow:0 1px 4px #0001;font-family:inherit}
+.qa-i{width:42px;height:42px;border-radius:50%;background:#EEF3EC;display:flex;align-items:center;justify-content:center}.qa-l{font-size:13px;font-weight:600}
+.banner{background:#FFF6D6;border:1px solid #F0DD8B;border-radius:12px;padding:14px;margin-top:16px}.banner.ok{background:#E6F6E2;border-color:#BFE3B7}.banner p{margin:4px 0 10px;font-size:13px}
+.bn{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:#fff;border-top:1px solid #E3EFE0;display:flex;padding:8px 0 calc(8px + env(safe-area-inset-bottom));z-index:20}
+.bn button{flex:1;background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:11px;color:#222;cursor:pointer;font-family:inherit}.bn button.on{color:#1F7A14;font-weight:700}
+.res-pad{padding-bottom:96px}.org-link{text-align:center;font-size:13px;margin:18px 0}
+.staff .sec-h{margin:8px 0 6px;color:#0B2A8A}
+@media(min-width:768px){.staff .qa{grid-template-columns:repeat(4,1fr)}}
 </style></head>
 <body>
 <div id="splash"><img src="logo.png" alt="SBISP logo"><h1>SBISP</h1><p class="s1">SMART BARANGAY</p><p class="s2">INFORMATION AND SERVICE PORTAL</p>
