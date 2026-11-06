@@ -8,6 +8,7 @@ import { esc, mountAnalytics, mountAnnouncementsAdmin, mountFeeSchedule, mountMa
          mountUpcomingHearings, loadActiveAnnouncements, renderAnnouncements } from './admin-features.js';
 import { mountAccounts } from './accounts.js';
 import { mountOfficials, loadOfficials, renderOrg } from './officials.js';
+import { mountComplaints, mountMyComplaints } from './complaints.js';
 
 const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
@@ -407,6 +408,9 @@ const tile = (k, label, icon, color) => `<button class="qa-t" data-k="${esc(k)}"
 const CL_NAVY = '#0B2A8A', CL_GREEN = '#1F7A14', CL_ORANGE = '#E8782A';
 
 /* ------------------------------------------------------------------ resident home (Canva page 10) */
+const BLU = '#1565C0', CP_GRN = '#1B8A2E';
+const fmtPh = m => (/^09\d{9}$/.test(m || '') ? `+63 ${m.slice(1, 4)} ${m.slice(4, 7)} ${m.slice(7)}` : (m || ''));
+const realEmail = e => (e && !e.endsWith('@sbisp-guinsorongan.app') ? e : '');
 const resName = () => me ? (me.first_name || (me.full_name || '').split(' ')[0])
   : (acct.user_metadata?.username || ((acct.email || '').endsWith('@sbisp-guinsorongan.app') ? '' : (acct.email || '').split('@')[0]));
 const regDone = () => !!me && me.status !== 'unverified';
@@ -414,66 +418,108 @@ const lockMsg = () => me?.status === 'verified' ? 'This service is coming in the
   : regDone() ? 'Services unlock once the barangay verifies your residency.' : 'Complete your resident registration to unlock this service.';
 const regEntry = () => { if (!regDone() || me.status === 'correction') { if (me) me.status = me.status === 'correction' ? 'correction' : 'unverified'; regStart(); } else home('profile'); };
 
-async function home(tab = 'home') {
+async function home(tab = 'home', opt = {}) {
   const uid = acct.id, name = resName() || 'Ka-Barangay';
   const [ann, nt] = await Promise.all([loadActiveAnnouncements(),
     supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(15)]);
   const notes = nt.data || [], unread = notes.some(n => !n.read);
-  const TITLES = { complaints: 'Complaints', analytics: 'Community Stats', alerts: 'Alerts & News', profile: 'My Profile', services: 'Barangay Services' };
+  const T = { complaints: ['Complaints', CP_GRN], analytics: ['Community Stats', CP_GRN], alerts: ['Alerts & News', BLU], profile: ['My Profile', BLU], services: ['Barangay Services', BLU] };
   const bell = `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}${unread ? '<span class="dot"></span>' : ''}</button>`;
   const search = `<div class="srch"><input id="sq" placeholder="Search services…" autocomplete="off">${ico('search', CL_GREEN, 20)}</div>`;
+  const edit = tab === 'profile' && (!me || me.role === 'resident') ? '<a href="#" id="pf-edit">EDIT</a>' : '';
   const head = tab === 'home' ? hdr(name, 'Maupay nga Adlaw!', `Welcome, ${esc(name)}!`, bell, search)
-    : hdr(name, esc(TITLES[tab] || ''), 'Barangay Guinsorongan', bell);
+    : `<div class="pg-h"><b style="color:${T[tab][1]}">${esc(T[tab][0])}</b>${edit}</div>`;
 
   const banner = !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
     : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p></div>`
     : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>` : '';
   const locked = t => `<div class="card"><b>${t}</b><p class="muted">${lockMsg()}</p>${regDone() ? '' : '<button class="btn" id="reg-now">REGISTER NOW</button>'}</div>`;
+  const verified = me?.status === 'verified';
   const body = {
-    home: `${banner}<div class="qa-h">Quick Actions</div><div class="qa" id="qa">${tile('complaints', 'Submit Complaint', 'complaint', CL_NAVY)}${tile('complaints', 'Track Complaint', 'track', CL_GREEN)}
+    home: `${banner}<div class="qa-h">Quick Actions</div><div class="qa" id="qa">${tile('complaint-new', 'Submit Complaint', 'complaint', CL_NAVY)}${tile('complaints', 'Track Complaint', 'track', CL_GREEN)}
       ${tile('alerts', 'Alerts & News', 'alert', CL_ORANGE)}${tile('analytics', 'Community Stats', 'stats', CL_GREEN)}${tile('reg', 'Resident Registration', 'reg', CL_NAVY)}${tile('services', 'Barangay Services', 'svc', CL_GREEN)}</div>
-      <div class="qa-h"><span>RECENT COMPLAINTS &amp; TRANSACTIONS</span></div><div class="card"><p class="muted">No complaints or requests yet.</p></div>
+      <div class="qa-h"><span>RECENT COMPLAINTS &amp; TRANSACTIONS</span></div><div class="card"><p class="muted">Open the Complaints tab to see your complaints.</p></div>
       <p class="org-link"><a href="#" id="org">View Barangay Organizational Structure</a></p>`,
-    complaints: locked('Complaints'), services: locked('Barangay Services'), analytics: `<div class="card"><b>Community Stats</b><p class="muted">Community statistics are coming in the next update.</p></div>`,
+    complaints: verified ? '<div id="cmp"></div>' : locked('Complaints'), services: locked('Barangay Services'),
+    analytics: `<div class="card"><b>Community Stats</b><p class="muted">Community statistics are coming in the next update.</p></div>`,
     alerts: `${renderAnnouncements(ann)}<div class="qa-h"><span>Notifications</span></div>`
       + (notes.map(n => `<div class="card">${esc(n.text)}<small class="muted" style="display:block">${new Date(n.created_at).toLocaleString('en-PH')}</small></div>`).join('') || '<p class="muted">No notifications yet.</p>'),
-    profile: `<div class="card">${row('Name', esc(me ? me.full_name : (resName() || '—')))}${row('Login', esc(me?.mobile || (acct.email || '').replace('@sbisp-guinsorongan.app', '') || '—'))}
-      ${row('Resident status', me ? badge(me.status) : badge('unverified'))}${me?.reference_no ? row('Reference', esc(me.reference_no)) : ''}</div>
-      <button class="btn" id="reg-now">${regDone() ? 'VIEW REGISTRATION STATUS' : 'RESIDENT REGISTRATION'}</button>
-      <button class="btn sec" id="org">Barangay Organizational Structure</button><button class="btn sec" id="lo">LOG OUT</button>`
+    profile: '<div id="pf"></div>'
   }[tab];
   const nav = [['home', 'Home', 'home'], ['complaints', 'Complaints', 'complaint'], ['analytics', 'Analytics', 'stats'], ['alerts', 'Alerts', 'alert'], ['profile', 'Profile', 'user']];
   show(`${head}<div class="wrap res-pad">${body}</div><nav class="bn">${nav.map(([k, l, i]) => `<button data-n="${k}" class="${tab === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`);
 
   document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => home(b.dataset.n); });
   if ($('bell')) $('bell').onclick = () => home('alerts');
-  document.querySelectorAll('.qa-t').forEach(t => { t.onclick = () => (t.dataset.k === 'reg' ? regEntry() : home(t.dataset.k)); });
+  document.querySelectorAll('.qa-t').forEach(t => { t.onclick = () => (t.dataset.k === 'reg' ? regEntry() : t.dataset.k === 'complaint-new' ? home('complaints', { form: true }) : home(t.dataset.k)); });
   if ($('sq')) $('sq').oninput = e => { const q = e.target.value.trim().toLowerCase(); document.querySelectorAll('.qa-t').forEach(t => { t.style.display = t.textContent.toLowerCase().includes(q) ? '' : 'none'; }); };
   if ($('reg-now')) $('reg-now').onclick = regEntry;
   if ($('fix')) $('fix').onclick = () => { me.status = 'correction'; regStart(); };           // allow re-submission after correction
   if ($('org')) $('org').onclick = e => { e.preventDefault(); orgPage(boot); };
-  if ($('lo')) $('lo').onclick = logout;
+  if (tab === 'complaints' && verified) mountMyComplaints($('cmp'), me, !!opt.form);
+  if (tab === 'profile') { profileView($('pf')); if ($('pf-edit')) $('pf-edit').onclick = e => { e.preventDefault(); $('pf-reg').click(); }; }
   if (tab === 'alerts' && unread) supabase.from('notifications').update({ read: true }).eq('user_id', uid).eq('read', false);
+}
+
+/* ------------------------------------------------------------------ My Profile (Figma), used by every account */
+function profileView(el) {
+  const isRes = !me || me.role === 'resident';
+  const nm = me?.full_name || resName() || 'User';
+  const sub = !me ? 'Registration not started' : !isRes ? roleLabel(me)
+    : ({ verified: 'Registered Resident', pending: 'Registration pending verification', correction: 'Registration needs correction', declined: 'Registration declined', unverified: 'Registration not submitted' }[me.status] || '');
+  const line = [me?.purok, 'Barangay Guinsorongan'].filter(Boolean).join(', ');
+  const f = (l, v) => `<div><small>${l}</small><span>${esc(v || '—')}</span></div>`;
+  const addr = [me?.street, me?.purok, 'Brgy. Guinsorongan'].filter(Boolean).join(', ');
+  el.innerHTML = `<div class="pf-card"><div class="pf-av">${esc(initials(nm))}</div><div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
+    <div class="pf-fields">${f('FULL NAME', nm)}${f('CONTACT NUMBER', fmtPh(me?.mobile))}${f('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${isRes ? f('ADDRESS', addr) : f('ROLE', roleLabel(me))}</div>
+    <div id="pf-m"></div>${isRes ? `<button class="btn bl" id="pf-reg">${regDone() ? 'Edit Registration Details' : 'Complete Resident Registration'}</button>` : ''}
+    <button class="btn gy" id="pf-pw">Change Password</button><button class="btn rd" id="pf-lo">Logout Account</button>
+    <p class="org-link"><a href="#" id="pf-org">View Barangay Organizational Structure</a></p>`;
+  if ($('pf-reg')) $('pf-reg').onclick = () => {
+    if (!regDone() || me.status === 'correction') return regEntry();
+    $('pf-m').innerHTML = msg('Your registration was already submitted. To correct your details, please contact the Barangay Secretary.');
+  };
+  $('pf-pw').onclick = () => pwView(el);
+  $('pf-lo').onclick = logout;
+  $('pf-org').onclick = e => { e.preventDefault(); orgPage(boot); };
+}
+function pwView(el) {
+  el.innerHTML = `<a href="#" id="pw-bk">‹ Back to profile</a><div id="pw-m"></div>
+    <div class="pf-fields" style="padding:6px 16px 16px">${field('pw-c', 'Current Password', '', 'password')}${field('pw-n', 'New Password', '', 'password', 'At least 6 characters')}${field('pw-n2', 'Confirm New Password', '', 'password')}</div>
+    <button class="btn" id="pw-go">SAVE NEW PASSWORD</button>`;
+  const bad = t => { $('pw-m').innerHTML = msg(esc(t), 'er'); };
+  $('pw-bk').onclick = e => { e.preventDefault(); profileView(el); };
+  $('pw-go').onclick = async () => {
+    const c = v('pw-c'), n = v('pw-n');
+    if (!c) return bad('Enter your current password.');
+    if (n.length < 6) return bad('The new password must be at least 6 characters.');
+    if (n !== v('pw-n2')) return bad('The two new passwords do not match.');
+    $('pw-go').disabled = true;
+    const chk = await supabase.auth.signInWithPassword({ email: acct.email, password: c });
+    if (chk.error) { $('pw-go').disabled = false; return bad('Your current password is incorrect.'); }
+    const { error } = await supabase.auth.updateUser({ password: n });
+    if (error) { $('pw-go').disabled = false; return bad(error.message); }
+    profileView(el); $('pf-m').innerHTML = msg('Your password was changed.');
+  };
 }
 
 /* ------------------------------------------------------------------ staff shell (same look as the resident home) */
 async function staff() {
   const admin = me.role === 'admin';
-  const tabs = admin ? ['Residents', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings']
-    : me.role === 'employee' ? ['Residents', 'Officials', 'Hearings'] : ['Hearings'];
-  const ICONS = { Residents: ['users', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY],
-    Masterlists: ['list', CL_GREEN], Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE] };
-  const views = { Residents: residentsTab, Accounts: mountAccounts, Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule,
-    Masterlists: mountMasterlists, Officials: mountOfficials, Hearings: mountUpcomingHearings };
+  const tabs = admin ? ['Residents', 'Complaints', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : me.role === 'employee' ? ['Residents', 'Complaints', 'Officials', 'Hearings', 'My Profile'] : ['Complaints', 'Hearings', 'My Profile'];
+  const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE],
+    'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN], Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
+  const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), Accounts: mountAccounts, Analytics: mountAnalytics, Announcements: mountAnnouncementsAdmin,
+    'Fee Schedule': mountFeeSchedule, Masterlists: mountMasterlists, Officials: mountOfficials, Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const out = `<button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
   const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out);
   const open = t => {
-    show(`${head()}<div class="wrap staff"><a href="#" id="sb">${tabs.length > 1 ? '‹ Back to menu' : ''}</a><h3 class="sec-h">${t}</h3><div id="pane"></div></div>`);
+    show(`${head()}<div class="wrap staff"><a href="#" id="sb">‹ Back to menu</a><h3 class="sec-h">${t}</h3><div id="pane"></div></div>`);
     $('lo').onclick = logout; $('sb').onclick = e => { e.preventDefault(); menu(); };
     views[t]($('pane'));
   };
   const menu = () => {
-    if (tabs.length === 1) return open(tabs[0]);
     show(`${head()}<div class="wrap staff"><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div></div>`);
     $('lo').onclick = logout;
     document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
