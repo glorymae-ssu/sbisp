@@ -7,7 +7,7 @@
 import { supabase } from './supabaseClient.js';
 
 /* ---------- settings you can change ---------- */
-const BARANGAY = { name: 'Guinsorongan', city: 'Catbalogan City', province: 'Samar', logo: 'assets/logo.png' };
+const BARANGAY = { name: 'Guinsorongan', city: 'Catbalogan City', province: 'Samar', logo: 'logo.png' };
 const PALETTE = ['#0F6B3A', '#2F8FD8', '#E8890C', '#8E5BD0', '#D32F2F', '#14A6A6', '#8A9A5B', '#C2185B', '#5D4037', '#607D8B'];
 
 /* ---------- small helpers ---------- */
@@ -15,12 +15,12 @@ export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;'
 export const php = n => '₱' + Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const monthShort = ym => new Date(ym + '-01T00:00:00').toLocaleString('en', { month: 'short' });
 const box = (kind, text) => `<div class="msg ${kind}" style="padding:10px;border-radius:10px;margin:8px 0;background:${kind === 'er' ? '#FDE6E6' : kind === 'wa' ? '#FFF0DC' : '#E4F5EA'}">${text}</div>`;
-const card = inner => `<div class="card" style="background:#fff;border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px #0001">${inner}</div>`;
+const card = inner => `<div class="card" style="background:#fff;border:1px solid #E2E6EA;border-radius:14px;padding:14px;margin-bottom:12px">${inner}</div>`;
 const input = (id, label, val = '', type = 'text') =>
-  `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="${id}">${esc(label)}</label>
-   <input id="${id}" type="${type}" value="${esc(val)}" style="width:100%;padding:11px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px">`;
+  `<label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;color:#555;text-transform:uppercase;margin:12px 0 4px" for="${id}">${esc(label)}</label>
+   <input id="${id}" type="${type}" value="${esc(val)}" style="width:100%;padding:11px;border:1px solid #D9DEE3;border-radius:10px;font-size:15px">`;
 const button = (label, id, extra = '') =>
-  `<button id="${id}" style="width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:600;font-size:15px;cursor:pointer;${extra || 'background:#0F6B3A;color:#fff'}">${label}</button>`;
+  `<button id="${id}" style="width:100%;padding:12px;border:0;border-radius:10px;margin-top:8px;font-weight:600;font-size:15px;cursor:pointer;${extra || 'background:#27C227;color:#fff'}">${label}</button>`;
 
 /* ---------- bar graph + column chart (no library) ---------- */
 export function bars(rows) {                       // rows = [[label, number], ...]
@@ -132,9 +132,9 @@ export async function mountAnnouncementsAdmin(el) {
   const { data: pks } = await supabase.from('puroks').select('name').order('sort');
   const today = new Date().toISOString().slice(0, 10), plus14 = new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10);
   el.innerHTML = card('<b>New announcement</b>'
-      + input('an-t', 'Title') + `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="an-b">Message</label><textarea id="an-b" style="width:100%;min-height:80px;padding:11px;border:1px solid #C9D2DC;border-radius:10px"></textarea>`
-      + `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="an-p">Audience</label>
-         <select id="an-p" style="width:100%;padding:11px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px">
+      + input('an-t', 'Title') + `<label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;color:#555;text-transform:uppercase;margin:12px 0 4px" for="an-b">Message</label><textarea id="an-b" style="width:100%;min-height:80px;padding:11px;border:1px solid #D9DEE3;border-radius:10px"></textarea>`
+      + `<label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;color:#555;text-transform:uppercase;margin:12px 0 4px" for="an-p">Audience</label>
+         <select id="an-p" style="width:100%;padding:11px;border:1px solid #D9DEE3;border-radius:10px;font-size:15px">
          <option value="">All residents</option>${(pks || []).map(p => `<option value="${esc(p.name)}">${esc(p.name)} only</option>`).join('')}</select>`
       + input('an-f', 'Show from', today, 'date') + input('an-u', 'Show until', plus14, 'date')
       + button('Post Announcement', 'an-save') + '<div id="an-msg"></div>')
@@ -183,8 +183,8 @@ const LISTS = ['All living residents', 'Registered Voters', 'Non-registered Vote
 export async function mountMasterlists(el) {
   const { data: pk } = await supabase.rpc('list_puroks');     // secured function: admin / Punong Barangay only
   const puroks = (pk || []).map(x => x.purok);
-  const sel = (id, label, opts) => `<label style="display:block;font-size:13px;font-weight:600;margin:10px 0 4px" for="${id}">${label}</label>
-    <select id="${id}" style="width:100%;padding:11px;border:1px solid #C9D2DC;border-radius:10px;font-size:15px">${opts.map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
+  const sel = (id, label, opts) => `<label style="display:block;font-size:11px;font-weight:700;letter-spacing:.4px;color:#555;text-transform:uppercase;margin:12px 0 4px" for="${id}">${label}</label>
+    <select id="${id}" style="width:100%;padding:11px;border:1px solid #D9DEE3;border-radius:10px;font-size:15px">${opts.map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
   el.innerHTML = sel('ml-t', 'List', LISTS) + sel('ml-p', 'Purok', ['All Puroks', ...puroks]) + '<div id="ml-out" style="margin-top:12px;overflow-x:auto"></div>';
   const draw = async () => {
     const type = el.querySelector('#ml-t').value, purok = el.querySelector('#ml-p').value;

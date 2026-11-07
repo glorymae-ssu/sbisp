@@ -12,6 +12,7 @@ import { mountComplaints, mountMyComplaints } from './complaints.js';
 import { mountServices, mountServiceRequests, recentActivity } from './services.js';
 import { mountDashboard, staffPanels } from './dashboard.js';
 import { mountClassification } from './classify.js';
+import { mountMasterlist } from './masterlist.js';
 
 const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
@@ -514,32 +515,54 @@ function pwView(el) {
 /* ------------------------------------------------------------------ staff shell (same look as the resident home) */
 async function staff() {
   const admin = me.role === 'admin';
-  const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Analytics', 'Hearings', 'My Profile']
+  const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
     : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
-    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Analytics', 'Officials', 'Hearings', 'My Profile']
+    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : ['Complaints', 'Hearings', 'My Profile'];
   const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY],
     Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me),
     'Residency Classification': el => mountClassification(el, me), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
-    Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: mountMasterlists, Officials: mountOfficials, Hearings: mountUpcomingHearings, 'My Profile': profileView };
-  const out = `<button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
-  const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out);
+    Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
+    Hearings: mountUpcomingHearings, 'My Profile': profileView };
+  const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]
+    .filter(([k]) => ['home', 'Alerts'].includes(k) || tabs.includes(k));
+  const bn = cur => `<nav class="bn">${NAV.map(([k, l, i]) => `<button data-n="${k}" class="${cur === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`;
+  const GREENS = ['Complaints', 'Analytics'];
+  const go = k => (k === 'home' ? menu() : k === 'Alerts' ? alertsPage() : open(k));
+  const bindNav = () => document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => go(b.dataset.n); });
+  const page = (title, cur, body, back) => {
+    show(`<div class="pg-h"><div class="pg-l">${back ? '<a href="#" id="sb" class="pg-bk">←</a>' : ''}<b style="color:${GREENS.includes(title) ? CP_GRN : BLU}">${esc(title)}</b></div></div>
+      <div class="wrap staff res-pad">${body}</div>${bn(cur)}`);
+    bindNav(); if (back) $('sb').onclick = e => { e.preventDefault(); go('home'); };
+  };
   const open = t => {
     if (!views[t] || !tabs.includes(t)) return;
-    show(`${head()}<div class="wrap staff"><a href="#" id="sb">‹ Back to menu</a><h3 class="sec-h">${t}</h3><div id="pane"></div></div>`);
-    $('lo').onclick = logout; $('sb').onclick = e => { e.preventDefault(); menu(); };
+    const top = NAV.some(([k]) => k === t);
+    page(t, top ? t : 'home', '<div id="pane"></div>', !top);
     views[t]($('pane'));
   };
+  const alertsPage = async () => {
+    page('Alerts & News', 'Alerts', '<div id="al-body"><p class="muted">Loading…</p></div>', false);
+    const [p, nt] = await Promise.all([staffPanels(me), supabase.from('notifications').select('*').eq('user_id', me.id).order('created_at', { ascending: false }).limit(20)]);
+    if (!$('al-body')) return;
+    const notes = nt.data || [];
+    $('al-body').innerHTML = p.alerts + '<div class="qa-h"><span>Notifications</span></div>'
+      + (notes.map(n => `<div class="card">${esc(n.text)}<small class="muted" style="display:block">${new Date(n.created_at).toLocaleString('en-PH')}</small></div>`).join('') || '<p class="muted">No notifications yet.</p>');
+    document.querySelectorAll('.al').forEach(x => { x.onclick = () => open(x.dataset.go); });
+    if (notes.some(n => !n.read)) supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false);
+  };
+  const out = `<button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
+  const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out);
   const menu = () => {
-    show(`${head()}<div class="wrap staff"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div></div>`);
-    $('lo').onclick = logout;
+    show(`${head()}<div class="wrap staff res-pad"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div></div>${bn('home')}`);
+    $('lo').onclick = logout; bindNav();
     document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
     staffPanels(me).then(p => {
       if (!$('st-sum')) return;
       $('st-sum').innerHTML = p.summary; $('st-al').innerHTML = p.alerts;
-      document.querySelectorAll('.al').forEach(a => { a.onclick = () => open(a.dataset.go); });
+      document.querySelectorAll('.al').forEach(x => { x.onclick = () => open(x.dataset.go); });
     }).catch(() => {});
   };
   menu();
