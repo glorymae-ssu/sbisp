@@ -31,6 +31,7 @@ export function renderOrg(list) {
 
 export async function mountOfficials(el) {
   let rows = await loadOfficials(), note = '', editing = null;       // editing: null, 'new' or an official's id
+  let accts = []; try { accts = (await supabase.rpc('org_staff_accounts')).data || []; } catch (e) { accts = []; }
 
   const draw = () => {
     if (editing) {
@@ -39,6 +40,8 @@ export async function mountOfficials(el) {
         <label for="of-n">Full name</label><input id="of-n" value="${esc(o.name || '')}" placeholder="Leave blank if not yet decided">
         <label for="of-p">Position</label><input id="of-p" value="${esc(o.position)}" placeholder="e.g. Barangay Kagawad">
         <label for="of-c">Designated committee(s)</label><input id="of-c" value="${esc(o.committees || '')}" placeholder="e.g. Peace and Order; Health (separate with ;)">
+        <label for="of-a">Login account (optional)</label><select id="of-a"><option value="">No login account</option>${accts.map(a => `<option value="${a.id}" ${a.id === o.profile_id ? 'selected' : ''}>${esc(a.full_name)}</option>`).join('')}</select>
+        <small class="muted">Link a staff account so this official can log in and see the complaints assigned to them.</small>
         <label for="of-g">Group</label><select id="of-g">${GROUPS.map(g => `<option ${g === o.grp ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select>
         <label for="of-s">Order in the list (1 = first)</label><input id="of-s" type="number" min="1" value="${o.sort}">
         <button class="btn" id="of-save">SAVE</button>${editing === 'new' ? '' : '<button class="btn er" id="of-del">DELETE</button>'}</div>`;
@@ -47,7 +50,7 @@ export async function mountOfficials(el) {
         const g = id => el.querySelector(id).value;
         if (!g('#of-p').trim()) { el.querySelector('#of-msg').innerHTML = msg('Enter the position.', 'er'); return; }
         const { error } = await supabase.rpc('org_save', { p_id: editing === 'new' ? null : editing, p_name: g('#of-n').trim(),
-          p_position: g('#of-p').trim(), p_grp: g('#of-g'), p_sort: parseInt(g('#of-s'), 10) || 1, p_committees: g('#of-c').trim() });
+          p_position: g('#of-p').trim(), p_grp: g('#of-g'), p_sort: parseInt(g('#of-s'), 10) || 1, p_committees: g('#of-c').trim(), p_profile: g('#of-a') || null });
         if (error) { el.querySelector('#of-msg').innerHTML = msg(error.message, 'er'); return; }
         rows = await loadOfficials(); editing = null; note = msg('Saved.'); draw();
       };

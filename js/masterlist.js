@@ -25,16 +25,17 @@ export async function mountMasterlist(el, me) {
   const draw = () => {
     const l = view();
     $('#ml-out').innerHTML = `<div class="cp-pn" style="margin:12px 0 8px"><small class="muted">${canEdit ? 'Tap a Precinct No. to correct or update it. It saves when you leave the box.' : 'View only.'}</small></div>
-      <div class="ml-wrap"><table class="ml-t"><tr><th>#</th><th>Name</th><th>Age</th><th>Sex</th><th>Address</th><th>Mobile</th><th>Precinct No.</th><th>Notes</th></tr>
+      <div class="ml-wrap"><table class="ml-t"><tr><th>#</th><th>Name</th><th>Age</th><th>Sex</th><th>Address</th><th>Mobile</th><th>Precinct No.</th><th>Notes</th>${canEdit ? '<th></th>' : ''}</tr>
       ${l.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.full_name)}</td><td>${esc(p.age ?? '')}</td><td>${esc(p.sex ?? '')}</td><td>${esc([p.purok, p.street].filter(Boolean).join(', '))}</td><td>${esc(p.mobile ?? '—')}</td>
-        <td>${canEdit ? `<input class="pn" data-id="${p.id}" value="${esc(p.precinct_no || '')}" placeholder="Optional" maxlength="20">` : esc(p.precinct_no || '—')}</td><td>${esc(p.notes ?? '')}</td></tr>`).join('')
-        || '<tr><td colspan="8">None</td></tr>'}</table></div>
+        <td>${canEdit ? `<input class="pn" data-id="${p.id}" value="${esc(p.precinct_no || '')}" placeholder="Optional" maxlength="20">` : esc(p.precinct_no || '—')}</td><td>${esc(p.notes ?? '')}</td>${canEdit ? `<td><button class="ml-ed" data-id="${p.id}" aria-label="Edit record">✎ Edit</button></td>` : ''}</tr>`).join('')
+        || `<tr><td colspan="${canEdit ? 9 : 8}">None</td></tr>`}</table></div>
       <p>Total: <b>${l.length}</b></p><button class="cp-g" id="ml-print">🖨️ Print / Save as PDF</button>`;
     $('#ml-print').onclick = () => printHTML(
       reportHeader('MASTERLIST', type + (purok === 'All Puroks' ? ' · All Puroks' : ' · ' + purok))
       + table(['#', 'Name', 'Age', 'Sex', 'Address', 'Mobile', 'Precinct No.', 'Notes'],
         l.map((p, i) => [i + 1, p.full_name, p.age, p.sex, [p.purok, p.street].filter(Boolean).join(', '), p.mobile ?? '—', p.precinct_no ?? '', p.notes ?? '']))
       + `<p>Total: <b>${l.length}</b></p>`, 'SBISP-Masterlist-' + type.replace(/\W+/g, '_'));
+    if (canEdit) $('#ml-out').querySelectorAll('.ml-ed').forEach(b => { b.onclick = () => edit(b.dataset.id); });
     if (canEdit) $('#ml-out').querySelectorAll('input.pn').forEach(inp => {
       inp.onchange = async () => {
         const row = rows.find(r => r.id === inp.dataset.id); if (!row) return;
@@ -46,6 +47,32 @@ export async function mountMasterlist(el, me) {
         $('#ml-flash').innerHTML = `<div class="msg">Precinct number saved for ${esc(row.full_name)}.</div>`;
       };
     });
+  };
+
+  /* ---- edit one resident's registry (masterlist) record: administrator and Barangay Secretary ---- */
+  const edit = async id => {
+    const g = await supabase.rpc('registry_get', { p_id: id });
+    if (g.error || !g.data) { $('#ml-flash').innerHTML = `<div class="msg er">${esc(g.error ? g.error.message : 'Record not found')}</div>`; return; }
+    const r = g.data, root = el.querySelector('#ml-out'), top = el.querySelector('.cp-form'), fl = $('#ml-flash');
+    const f = (i, l, v, t = 'text', ph = '') => `<label for="${i}">${l}</label><input id="${i}" type="${t}" value="${esc(v ?? '')}" placeholder="${esc(ph)}">`;
+    const s2 = (i, l, o, v) => `<label for="${i}">${l}</label><select id="${i}">${o.map(x => `<option ${x === v ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>`;
+    top.style.display = 'none'; fl.innerHTML = '';
+    root.innerHTML = `<a href="#" id="ed-bk">‹ Back to the masterlist</a><div class="cp-form"><div id="ed-m"></div>
+      ${f('ed-f', 'FIRST NAME', r.first_name)}${f('ed-m2', 'MIDDLE NAME', r.middle_name)}${f('ed-l', 'LAST NAME', r.last_name)}${f('ed-b', 'DATE OF BIRTH', r.birthdate, 'date')}
+      ${s2('ed-s', 'SEX', ['Female', 'Male'], r.sex)}${s2('ed-c', 'CIVIL STATUS', ['Single', 'Married', 'Widow', 'Living-in with Partner', 'Single Parent'], r.civil_status)}
+      ${f('ed-mo', 'MOBILE NUMBER', r.mobile, 'tel', '09XXXXXXXXX')}${s2('ed-pu', 'PUROK', ['', ...puroks], r.purok)}${f('ed-st', 'STREET / HOUSE NO.', r.street)}
+      ${s2('ed-v', 'VOTER STATUS', ['Registered Voter', 'Non-registered Voter'], r.voter_status || 'Non-registered Voter')}${f('ed-pn', 'PRECINCT NUMBER (OPTIONAL)', r.precinct_no, 'text', 'Optional')}
+      ${s2('ed-pwd', 'PERSON WITH DISABILITY (PWD)', ['No', 'Yes'], r.is_pwd ? 'Yes' : 'No')}${s2('ed-dc', 'DECEASED', ['No', 'Yes'], r.is_deceased ? 'Yes' : 'No')}</div>
+      <button class="cp-g" id="ed-save">Save Changes</button>`;
+    const done = () => { top.style.display = ''; load(); };
+    root.querySelector('#ed-bk').onclick = e => { e.preventDefault(); done(); };
+    root.querySelector('#ed-save').onclick = async () => {
+      const v = i => root.querySelector('#' + i).value;
+      const { error } = await supabase.rpc('registry_update', { p_id: id, p: { first_name: v('ed-f'), middle_name: v('ed-m2'), last_name: v('ed-l'), birthdate: v('ed-b'), sex: v('ed-s'),
+        civil_status: v('ed-c'), mobile: v('ed-mo'), purok: v('ed-pu'), street: v('ed-st'), voter_status: v('ed-v'), precinct_no: v('ed-pn'), is_pwd: v('ed-pwd') === 'Yes', is_deceased: v('ed-dc') === 'Yes' } });
+      if (error) { root.querySelector('#ed-m').innerHTML = `<div class="msg er">${esc(error.message)}</div>`; return; }
+      done(); $('#ml-flash').innerHTML = '<div class="msg">Resident record saved.</div>';
+    };
   };
   const load = async () => {
     type = $('#ml-t').value; purok = $('#ml-p').value;

@@ -80,16 +80,19 @@ export async function staffPanels(me) {
   const comp = c.data || [], reqs = s.data || [];
   let pend = 0;
   if (role === 'manage') { try { const q = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'resident').eq('status', 'pending'); pend = q.count || 0; } catch (e) { pend = 0; } }
+  let upd = 0;
+  if (role === 'manage') { try { const u = await supabase.rpc('profile_updates_list'); upd = (u.data || []).filter(x => x.status === 'pending' && x.user_id !== me.id).length; } catch (e) { upd = 0; } }
   const n = st => comp.filter(x => x.status === st).length;
   const summary = `<div class="qa-h"><span>${role === 'officer' ? 'MY ASSIGNED COMPLAINTS' : 'COMPLAINTS SUMMARY'}</span></div>
     <div class="ss"><div class="ss-p"><b>${n('pending')}</b><small>Pending</small></div><div class="ss-o"><b>${n('ongoing')}</b><small>Ongoing</small></div><div class="ss-r"><b>${n('resolved')}</b><small>Resolved Case</small></div></div>`;
   const items = [];
   if (pend) items.push({ go: 'Residents', t: 'Residents waiting for verification', chip: `<span class="cp-chip fr">${pend} PENDING</span>`, sub: 'Open Residents to review the registrations' });
+  if (upd) items.push({ go: 'Profile Updates', t: 'Profile updates waiting for approval', chip: `<span class="cp-chip fr">${upd} PENDING</span>`, sub: 'Open Profile Updates to approve or reject' });
   comp.filter(x => x.status !== 'resolved').slice(0, 4).forEach(x => items.push({ go: 'Complaints', t: x.title,
-    chip: x.assigned_to ? '<span class="cp-chip as">ASSIGNED</span>' : '<span class="cp-chip un">UNASSIGNED</span>',
-    sub: role === 'officer' ? `Assigned to you • ${ago(x.updated_at || x.created_at)}` : x.assigned_to ? `Assigned to ${esc(x.assigned_name || 'an officer')} • ${ago(x.updated_at || x.created_at)}` : `Submitted by ${esc(x.filer_name || 'a resident')} • ${ago(x.created_at)}` }));
+    chip: x.assigned_name ? '<span class="cp-chip as">ASSIGNED</span>' : '<span class="cp-chip un">UNASSIGNED</span>',
+    sub: role === 'officer' ? `Assigned to you • ${ago(x.updated_at || x.created_at)}` : x.assigned_name ? `Assigned to ${esc(x.assigned_name || 'an officer')} • ${ago(x.updated_at || x.created_at)}` : `Submitted by ${esc(x.filer_name || 'a resident')} • ${ago(x.created_at)}` }));
   reqs.filter(x => x.status === 'for_review').slice(0, 3).forEach(x => items.push({ go: 'Service Requests', t: x.service, chip: '<span class="cp-chip fr">FOR REVIEW</span>', sub: `Requested by ${esc(x.resident_name || 'a resident')} • ${ago(x.created_at)}` }));
-  const fresh = pend + comp.filter(x => x.status !== 'resolved' && !x.assigned_to).length + reqs.filter(x => x.status === 'for_review').length;
+  const fresh = pend + upd + comp.filter(x => x.status !== 'resolved' && !x.assigned_name).length + reqs.filter(x => x.status === 'for_review').length;
   const alerts = `<div class="qa-h"><span>NEW RECENT ALERTS</span>${fresh ? `<span class="new-pill">${fresh} NEW</span>` : ''}</div>`
     + (items.slice(0, 6).map(i => `<div class="cp-card al" data-go="${esc(i.go)}"><div class="cp-top"><b style="color:#111">${esc(i.t)}</b>${i.chip}</div><small class="muted">${i.sub}</small></div>`).join('')
       || '<div class="card"><p class="muted">No new alerts. You are all caught up.</p></div>');

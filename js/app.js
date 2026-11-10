@@ -13,6 +13,7 @@ import { mountServices, mountServiceRequests, recentActivity } from './services.
 import { mountDashboard, staffPanels } from './dashboard.js';
 import { mountClassification } from './classify.js';
 import { mountMasterlist } from './masterlist.js';
+import { mountProfileUpdates } from './profilereview.js';
 
 const app = document.getElementById('app');
 const $ = id => document.getElementById(id);
@@ -287,15 +288,15 @@ function rgInit() {
   rg = { first: p.first_name || '', middle: p.middle_name || '', last: p.last_name || '', birth: p.birthdate || '', sex: p.sex || 'Female', civil: p.civil_status || 'Single',
     mobile: (p.mobile || u.mobile || '').replace(/^0/, ''), mobileLocked: !!u.mobile, email: p.contact_email || real, emailLocked: !!real,
     street: p.street || '', purok: p.purok || '', prev_street: p.previous_street || '', prev_barangay: p.previous_barangay || '', prev_city: p.previous_city || '',
-    since: p.residing_since || '', voter: voterChoice(p), cur: fromProfile(p), id_type: p.valid_id_type || IDS[0], id_number: p.id_number || '', id_path: p.id_file_path || '', consent: false };
+    since: p.residing_since || '', voter: voterChoice(p), precinct: p.precinct_no || '', username: u.username || '', edit: false, cur: fromProfile(p), id_type: p.valid_id_type || IDS[0], id_number: p.id_number || '', id_path: p.id_file_path || '', consent: false };
   idFile = null;
 }
 const regStart = () => { rgInit(); rg1(); };
 const lab = (id, t, hint) => `<label for="${id}">${t}${hint ? ` <em>(${hint})</em>` : ''}</label>`;
 const sel2 = (id, l, opts, val) => `<label for="${id}">${l}</label><select id="${id}">${opts.map(o => { const [x, t] = Array.isArray(o) ? o : [o, o];
   return `<option value="${esc(x)}" ${x === val ? 'selected' : ''}>${esc(t)}</option>`; }).join('')}</select>`;
-const rgHead = (step, sub) => `<div class="rg"><div class="rg-top"><a href="#" id="rg-bk" aria-label="Back">←</a><span>Resident Registration</span></div>
-  <div class="rg-step"><b>STEP ${step} OF 3</b><div>${sub}</div><div class="rg-bar"><i style="width:${Math.round(step / 3 * 100)}%"></i></div></div><div class="rg-body">`;
+const rgHead = (step, sub) => { const tot = rg.edit ? 2 : 3; return `<div class="rg"><div class="rg-top"><a href="#" id="rg-bk" aria-label="Back">←</a><span>${rg.edit ? 'Edit Profile' : 'Resident Registration'}</span></div>
+  <div class="rg-step"><b>STEP ${step} OF ${tot}</b><div>${sub}</div><div class="rg-bar"><i style="width:${Math.round(step / tot * 100)}%"></i></div></div><div class="rg-body">`; };
 const rgFoot = '</div></div>';
 
 async function rg1(err = '') {
@@ -306,16 +307,17 @@ async function rg1(err = '') {
     ${lab('g-l', 'LASTNAME', 'APELYIDO')}<input id="g-l" value="${esc(a.last)}" autocomplete="family-name">
     ${lab('g-b', 'DATE OF BIRTH')}<input id="g-b" type="date" value="${esc(a.birth)}">
     ${sel2('g-s', 'BIRTH GENDER', ['Female', 'Male'], a.sex)}${sel2('g-c', 'CIVIL STATUS', CIVIL, a.civil)}
-    ${lab('g-mo', 'CONTACT NUMBER', 'ACTIVE CELLPHONE NUMBER')}<div class="rg-ph"><span>+63</span><input id="g-mo" type="tel" inputmode="numeric" maxlength="11" placeholder="9601234567" value="${esc(a.mobile)}" ${a.mobileLocked ? 'readonly' : ''}></div>
-    ${lab('g-em', 'EMAIL ADDRESS')}<input id="g-em" type="email" placeholder="juandelacruz@gmail.com" value="${esc(a.email)}" ${a.emailLocked ? 'readonly' : ''}>
+    ${lab('g-mo', 'CONTACT NUMBER', 'ACTIVE CELLPHONE NUMBER')}<div class="rg-ph"><span>+63</span><input id="g-mo" type="tel" inputmode="numeric" maxlength="11" placeholder="9601234567" value="${esc(a.mobile)}" ${a.mobileLocked && !a.edit ? 'readonly' : ''}></div>${a.edit ? '<p class="muted" style="margin:4px 0 0">Changing this updates your record only. Your login stays the same.</p>' : ''}
+    ${lab('g-em', 'EMAIL ADDRESS')}<input id="g-em" type="email" placeholder="juandelacruz@gmail.com" value="${esc(a.email)}" ${a.emailLocked && !a.edit ? 'readonly' : ''}>${a.edit ? `${lab('g-un', 'USERNAME')}<input id="g-un" value="${esc(a.username)}" placeholder="juandelacruz_2026" autocapitalize="none">` : ''}
     ${lab('g-st', 'CURRENT ADDRESS', 'STREET / HOUSE NUMBER')}<input id="g-st" placeholder="e.g. Sta. Ana Street" value="${esc(a.street)}">
     ${sel2('g-pu', 'PUROK/SITIO', pk, a.purok)}</div>
     <button id="g-go" class="btn">Continue</button>${rgFoot}`);
   const save = () => Object.assign(rg, { first: v('g-f').trim(), middle: v('g-m').trim(), last: v('g-l').trim(), birth: v('g-b'), sex: v('g-s'), civil: v('g-c'),
-    mobile: cleanMobile(v('g-mo')), email: v('g-em').trim(), street: v('g-st').trim(), purok: v('g-pu') });
-  $('rg-bk').onclick = e => { e.preventDefault(); home(); };
+    mobile: cleanMobile(v('g-mo')), email: v('g-em').trim(), street: v('g-st').trim(), purok: v('g-pu'), username: $('g-un') ? v('g-un').trim() : rg.username });
+  $('rg-bk').onclick = e => { e.preventDefault(); home(rg.edit ? 'profile' : 'home'); };
   $('g-go').onclick = () => {
     save();
+    if (rg.edit && rg.username && !/^[A-Za-z0-9_.]{3,30}$/.test(rg.username)) return rg1('A username needs 3 to 30 letters, numbers, dots or underscores.');
     if (!rg.first || !rg.last || !rg.birth) return rg1('First name, last name and date of birth are required.');
     if (new Date(rg.birth) > new Date()) return rg1('Date of birth cannot be in the future.');
     if (!/^9\d{9}$/.test(rg.mobile)) return rg1('Enter your 10-digit mobile number, for example 9601234567.');
@@ -333,11 +335,12 @@ function rg2(err = '') {
     ${lab('g-sd', 'DATE STARTED RESIDING IN CURRENT BARANGAY')}<input id="g-sd" type="date" value="${esc(rg.since)}">
     ${adult ? `<label>REGISTERED VOTER STATUS</label>${VOTER.map(([k, t]) => `<label class="rg-radio"><input type="radio" name="g-v" value="${k}" ${rg.voter === k ? 'checked' : ''}> ${esc(t)}</label>`).join('')}
       <div class="rg-note">Voter status does not affect registration or access to basic barangay services.</div>` : ''}
+    ${lab('g-pn', 'PRECINCT NUMBER', 'OPTIONAL')}<input id="g-pn" maxlength="20" placeholder="e.g. 0123A" value="${esc(rg.precinct)}">
     <div class="rg-h">ADDITIONAL DETAILS</div><div id="dyn">${detailHTML(a, rg.cur)}</div></div>
-    <button id="g-go" class="btn">Continue</button>${rgFoot}`);
+    <button id="g-go" class="btn">${rg.edit ? 'Submit for Approval' : 'Continue'}</button>${rgFoot}`);
   const { sync } = bindDetails(rg.cur, () => a);
   const save = () => {
-    sync(); Object.assign(rg, { prev_street: v('g-ps').trim(), prev_barangay: v('g-pb').trim(), prev_city: v('g-pc').trim(), since: v('g-sd') });
+    sync(); Object.assign(rg, { prev_street: v('g-ps').trim(), prev_barangay: v('g-pb').trim(), prev_city: v('g-pc').trim(), since: v('g-sd'), precinct: v('g-pn').trim() });
     const r = document.querySelector('input[name="g-v"]:checked'); rg.voter = adult ? (r ? r.value : 'unspecified') : 'not';
   };
   $('rg-bk').onclick = e => { e.preventDefault(); save(); rg1(); };
@@ -345,6 +348,8 @@ function rg2(err = '') {
     save();
     if (!rg.since) return rg2('Enter the date you started residing in this barangay.');
     if (new Date(rg.since) > new Date()) return rg2('The date you started residing cannot be in the future.');
+    if (!/^[A-Za-z0-9 -]{0,20}$/.test(rg.precinct)) return rg2('A precinct number may contain letters, numbers, spaces or dashes (up to 20 characters).');
+    if (rg.edit) return submitEdit();
     rg3();
   };
 }
@@ -382,7 +387,7 @@ function rg3(err = '') {
     const a = age(rg.birth) ?? 0;
     const p = { first: rg.first, middle: rg.middle, last: rg.last, birthdate: rg.birth, sex: rg.sex, civil: rg.civil, mobile: '0' + rg.mobile, email: rg.email,
       purok: rg.purok, street: rg.street, prev_street: rg.prev_street, prev_barangay: rg.prev_barangay, prev_city: rg.prev_city, residing_since: rg.since,
-      voter: rg.voter, valid_id_type: rg.id_type, id_number: rg.id_number, id_file_path: path, consent: true, ...detailPayload(a, rg.cur) };
+      voter: rg.voter, precinct_no: rg.precinct, valid_id_type: rg.id_type, id_number: rg.id_number, id_file_path: path, consent: true, ...detailPayload(a, rg.cur) };
     const { data: ref, error } = await supabase.rpc('submit_registry', { p });
     if (error) return rg3(error.message);
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', acct.id).maybeSingle(); me = fresh || me;
@@ -418,14 +423,16 @@ const realEmail = e => (e && !e.endsWith('@sbisp-guinsorongan.app') ? e : '');
 const resName = () => me ? (me.first_name || (me.full_name || '').split(' ')[0])
   : (acct.user_metadata?.username || ((acct.email || '').endsWith('@sbisp-guinsorongan.app') ? '' : (acct.email || '').split('@')[0]));
 const regDone = () => !!me && me.status !== 'unverified';
-const lockMsg = () => me?.status === 'verified' ? 'This service is coming in the next update.'
+const lockMsg = () => pendingUpdate ? 'Your profile update is waiting for approval. You can use this service again once it is approved.' : me?.status === 'verified' ? 'This service is coming in the next update.'
   : regDone() ? 'Services unlock once the barangay verifies your residency.' : 'Complete your resident registration to unlock this service.';
 const regEntry = () => { if (!regDone() || me.status === 'correction') { if (me) me.status = me.status === 'correction' ? 'correction' : 'unverified'; regStart(); } else home('profile'); };
 
 async function home(tab = 'home', opt = {}) {
   const uid = acct.id, name = resName() || 'Ka-Barangay';
-  const [ann, nt] = await Promise.all([loadActiveAnnouncements(),
-    supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(15)]);
+  const [ann, nt, pu] = await Promise.all([loadActiveAnnouncements(),
+    supabase.from('notifications').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(15),
+    me && me.role === 'resident' ? supabase.rpc('my_profile_update') : Promise.resolve({ data: [] })]);
+  pendingUpdate = pu.data && pu.data[0] && pu.data[0].status === 'pending' ? pu.data[0] : null;
   const notes = nt.data || [], unread = notes.some(n => !n.read);
   const T = { complaints: ['Complaints', CP_GRN], analytics: ['Community Stats', CP_GRN], alerts: ['Alerts & News', BLU], profile: ['My Profile', BLU], services: ['Barangay Services', BLU] };
   const bell = `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}${unread ? '<span class="dot"></span>' : ''}</button>`;
@@ -434,11 +441,11 @@ async function home(tab = 'home', opt = {}) {
   const head = tab === 'home' ? hdr(name, 'Maupay nga Adlaw!', `Welcome, ${esc(name)}!`, bell, search)
     : `<div class="pg-h"><b style="color:${T[tab][1]}">${esc(T[tab][0])}</b>${edit}</div>`;
 
-  const banner = !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
+  const banner = pendingUpdate ? `<div class="banner"><b>Profile update waiting for approval</b><p>Complaints and services are paused until the barangay approves your changes.</p></div>` : !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
     : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p></div>`
     : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>` : '';
   const locked = t => `<div class="card"><b>${t}</b><p class="muted">${lockMsg()}</p>${regDone() ? '' : '<button class="btn" id="reg-now">REGISTER NOW</button>'}</div>`;
-  const verified = me?.status === 'verified';
+  const verified = me?.status === 'verified' && !pendingUpdate;
   const body = {
     home: `${banner}<div class="qa-h">Quick Actions</div><div class="qa" id="qa">${tile('complaint-new', 'Submit Complaint', 'complaint', CL_NAVY)}${tile('complaints', 'Track Complaint', 'track', CL_GREEN)}
       ${tile('alerts', 'Alerts & News', 'alert', CL_ORANGE)}${tile('analytics', 'Community Stats', 'stats', CL_GREEN)}${tile('reg', 'Resident Registration', 'reg', CL_NAVY)}${tile('services', 'Barangay Services', 'svc', CL_GREEN)}</div>
@@ -471,26 +478,78 @@ async function home(tab = 'home', opt = {}) {
 }
 
 /* ------------------------------------------------------------------ My Profile (Figma), used by every account */
+const catLine = p => { const a = age(p.birthdate) ?? 0, t = [];
+  if (a >= 60) t.push('Senior Citizen' + (p.pension_status && p.pension_status !== 'Not a pensioner' ? ' (' + p.pension_status + ')' : ''));
+  if (p.is_pwd) t.push('PWD'); if (p.youth_status) t.push(p.youth_status); if (p.school_level) t.push(p.school_level);
+  if (p.sk_voter_status === 'Registered SK Voter') t.push('Registered SK Voter');
+  return t.join(' · '); };
+const voterLine = p => (p.voter_status === 'Registered Voter' ? 'Registered voter – this barangay' : p.voter_place || (p.voter_status ? 'Not a registered voter' : ''));
 function profileView(el) {
   const isRes = !me || me.role === 'resident';
   const nm = me?.full_name || resName() || 'User';
   const sub = !me ? 'Registration not started' : !isRes ? roleLabel(me)
     : ({ verified: 'Registered Resident', pending: 'Registration pending verification', correction: 'Registration needs correction', declined: 'Registration declined', unverified: 'Registration not submitted' }[me.status] || '');
   const line = [me?.purok, 'Barangay Guinsorongan'].filter(Boolean).join(', ');
-  const f = (l, v) => `<div><small>${l}</small><span>${esc(v || '—')}</span></div>`;
+  const f = (l, v) => (v ? `<div><small>${l}</small><span>${esc(v)}</span></div>` : '');
+  const f2 = (l, v) => `<div><small>${l}</small><span>${esc(v || '—')}</span></div>`;
   const addr = [me?.street, me?.purok, 'Brgy. Guinsorongan'].filter(Boolean).join(', ');
+  const prev = [me?.previous_street, me?.previous_barangay, me?.previous_city].filter(Boolean).join(', ');
+  const idn = me?.id_number ? `${me.valid_id_type || 'ID'} · ••••${String(me.id_number).slice(-4)}` : '';
+  const uname = acct.user_metadata?.username || '';
+  const fields = isRes
+    ? `${f2('FULL NAME', nm)}${f('USERNAME', uname)}${f('DATE OF BIRTH', me?.birthdate ? new Date(me.birthdate + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '')}${f('SEX', me?.sex)}${f('CIVIL STATUS', me?.civil_status)}
+       ${f2('CONTACT NUMBER', fmtPh(me?.mobile))}${f2('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${f2('ADDRESS', addr)}${f('PREVIOUS ADDRESS', prev)}
+       ${f('RESIDING HERE SINCE', me?.residing_since ? new Date(me.residing_since + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' }) : '')}
+       ${me ? f('VOTER STATUS', voterLine(me)) : ''}${me ? f2('PRECINCT NUMBER (OPTIONAL)', me.precinct_no) : ''}${f('VALID ID', idn)}${me ? f('CATEGORY', catLine(me)) : ''}`
+    : `${f2('FULL NAME', nm)}${f('USERNAME', uname)}${f2('CONTACT NUMBER', fmtPh(me?.mobile))}${f2('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${f2('ROLE', roleLabel(me))}`;
+  const canEdit = me && (me.role !== 'resident' || me.status === 'verified');
   el.innerHTML = `<div class="pf-card"><div class="pf-av">${esc(initials(nm))}</div><div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
-    <div class="pf-fields">${f('FULL NAME', nm)}${f('CONTACT NUMBER', fmtPh(me?.mobile))}${f('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${isRes ? f('ADDRESS', addr) : f('ROLE', roleLabel(me))}</div>
-    <div id="pf-m"></div>${isRes ? `<button class="btn bl" id="pf-reg">${regDone() ? 'Edit Registration Details' : 'Complete Resident Registration'}</button>` : ''}
+    <div id="pf-pu"></div><div class="pf-fields">${fields}</div>
+    <div id="pf-m"></div>${isRes ? `<button class="btn bl" id="pf-reg">${regDone() ? 'Edit Registration Details' : 'Complete Resident Registration'}</button>` : '<button class="btn bl" id="pf-reg">Edit Profile</button>'}
     <button class="btn gy" id="pf-pw">Change Password</button><button class="btn rd" id="pf-lo">Logout Account</button>
     <p class="org-link"><a href="#" id="pf-org">View Barangay Organizational Structure</a></p>`;
-  if ($('pf-reg')) $('pf-reg').onclick = () => {
-    if (!regDone() || me.status === 'correction') return regEntry();
-    $('pf-m').innerHTML = msg('Your registration was already submitted. To correct your details, please contact the Barangay Secretary.');
+  if (me) supabase.rpc('my_profile_update').then(({ data }) => {
+    const u = data && data[0]; if (!u || !$('pf-pu')) return;
+    pendingUpdate = u.status === 'pending' ? u : null;
+    if (u.status === 'pending') {
+      $('pf-pu').innerHTML = `<div class="banner" style="margin:12px 0"><b>Profile update waiting for approval</b><p>The Barangay Secretary or the administrator will check your changes. You cannot file complaints or request services until it is approved.</p><button class="btn gy" id="pu-cancel" style="margin-top:0">Cancel my update</button></div>`;
+      $('pu-cancel').onclick = async () => { await supabase.rpc('profile_update_cancel'); pendingUpdate = null; profileView(el); };
+      if ($('pf-reg')) $('pf-reg').disabled = true;
+    } else if (u.status === 'rejected') $('pf-pu').innerHTML = `<div style="margin:12px 0">${msg('Your last profile update was not approved: ' + esc(u.note || ''), 'er')}</div>`;
+  });
+  $('pf-reg').onclick = () => {
+    if (isRes && (!regDone() || me.status === 'correction')) return regEntry();
+    if (!canEdit) { $('pf-m').innerHTML = msg('Your registration is waiting for verification. The Barangay Secretary can correct it while checking.'); return; }
+    if (isRes) { rgInit(); rg.edit = true; return rg1(); }
+    staffEdit(el);
   };
   $('pf-pw').onclick = () => pwView(el);
   $('pf-lo').onclick = logout;
   $('pf-org').onclick = e => { e.preventDefault(); orgPage(boot); };
+}
+let pendingUpdate = null;
+async function submitEdit() {
+  const a = age(rg.birth) ?? 0, d = detailPayload(a, rg.cur);
+  const p = { first_name: rg.first, middle_name: rg.middle, last_name: rg.last, birthdate: rg.birth, sex: rg.sex, civil_status: rg.civil, mobile: '0' + rg.mobile, contact_email: rg.email,
+    purok: rg.purok, street: rg.street, previous_street: rg.prev_street, previous_barangay: rg.prev_barangay, previous_city: rg.prev_city, residing_since: rg.since, voter: rg.voter,
+    precinct_no: rg.precinct, username: rg.username, youth_status: d.youth_status, school_level: d.school_level, employment_interest: d.employment_interest, study_interest: d.study_interest,
+    sk_voter_status: d.sk_voter_status, pension_status: d.pension_status, senior_id: d.senior_id, is_pwd: d.is_pwd, pwd_id: d.pwd_id };
+  const { error } = await supabase.rpc('profile_update_request', { p });
+  if (error) return rg2(error.message);
+  rg.edit = false; home('profile');
+}
+function staffEdit(el) {
+  const un = acct.user_metadata?.username || '';
+  el.innerHTML = `<a href="#" id="se-bk">‹ Back to profile</a><div id="se-m"></div>
+    <div class="pf-fields" style="padding:6px 16px 16px">${field('se-n', 'Full Name', me.full_name)}${field('se-mo', 'Contact Number', me.mobile || '', 'tel', '09XXXXXXXXX')}${field('se-em', 'Email Address', me.contact_email || realEmail(acct.email), 'email')}${field('se-un', 'Username (optional)', un)}</div>
+    <p class="muted">Your changes are checked by the administrator or the Barangay Secretary before they apply.</p><button class="btn" id="se-go">SUBMIT FOR APPROVAL</button>`;
+  $('se-bk').onclick = e => { e.preventDefault(); profileView(el); };
+  $('se-go').onclick = async () => {
+    const p = { full_name: v('se-n').trim(), mobile: v('se-mo').trim(), contact_email: v('se-em').trim(), username: v('se-un').trim() };
+    const { error } = await supabase.rpc('profile_update_request', { p });
+    if (error) { $('se-m').innerHTML = msg(esc(error.message), 'er'); return; }
+    profileView(el);
+  };
 }
 function pwView(el) {
   el.innerHTML = `<a href="#" id="pw-bk">‹ Back to profile</a><div id="pw-m"></div>
@@ -516,14 +575,14 @@ function pwView(el) {
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
-    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
-    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
+    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : ['Complaints', 'Hearings', 'My Profile'];
-  const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY],
+  const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY], 'Profile Updates': ['user', CL_ORANGE],
     Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me),
-    'Residency Classification': el => mountClassification(el, me), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
+    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
     Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
     Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]

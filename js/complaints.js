@@ -16,6 +16,12 @@ const chip = s => `<span class="cp-chip ${(ST[s] || ST.pending)[1]}">${(ST[s] ||
 const note = (t, k = '') => `<div class="msg ${k}">${esc(t)}</div>`;
 const SEARCH = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>';
 const SLIDERS = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>';
+const ROLE = { employee: 'Secretary / Employee', kagawad: 'Kagawad', skchair: 'SK Chairperson', treasurer: 'Treasurer' };
+const group = (officers, cur) => {                       // officials from the Organizational Structure, with position and committee
+  const g = {}; officers.forEach(x => { (g[x.grp || 'Officials'] = g[x.grp || 'Officials'] || []).push(x); });
+  return Object.entries(g).map(([n, l]) => `<optgroup label="${esc(n)}">${l.map(x => `<option value="${x.id}" ${x.id === cur ? 'selected' : ''}>${esc(x.name)} — ${esc(x.position || '')}${x.committees ? ' · ' + esc(x.committees) : ''}${x.has_account ? '' : ' (no login)'}</option>`).join('')}</optgroup>`).join('');
+};
+const asLine = r => `${r.assigned_name}${r.assigned_position ? ' (' + r.assigned_position + (r.assigned_committees ? ', ' + r.assigned_committees : '') + ')' : ''}`;
 const opts = (list, val) => list.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return `<option value="${esc(v)}" ${v === val ? 'selected' : ''}>${esc(l)}</option>`; }).join('');
 
 /* ---------------------------------------------------------------- staff */
@@ -30,6 +36,7 @@ export async function mountComplaints(el, me) {
   await load();
   if (mode !== 'officer') officers = (await supabase.rpc('complaint_officers')).data || [];
   const puroks = [...new Set(rows.map(r => r.purok).filter(Boolean))].sort();
+  const assigneeOpts = (cur) => group(officers, cur);
 
   el.innerHTML = `<div class="cp-bar"><div class="cp-s">${SEARCH}<input id="cp-q" placeholder="Search complaints or ID…" autocomplete="off"></div>
       <button id="cp-f" class="cp-fb" aria-label="Filters">${SLIDERS}</button></div><div id="cp-flt"></div><div class="cp-chips" id="cp-chips"></div>
@@ -45,13 +52,14 @@ export async function mountComplaints(el, me) {
       <textarea class="rm" placeholder="Remarks or action taken (optional)" ${can ? '' : 'disabled'}>${esc(r.remarks || '')}</textarea>
       ${can ? '<button class="cp-g sec" data-a="save">Save Status</button>' : ''}
       ${mode === 'manage' ? (assigning === r.id
-        ? `<div class="cp-r"><span>OFFICER</span><select class="of">${opts(officers.map(x => [x.id, x.name + ' (' + ({ employee: 'Secretary / Employee', kagawad: 'Kagawad', skchair: 'SK Chairperson', treasurer: 'Treasurer' }[x.role] || x.role) + ')']), r.assigned_to)}</select></div>
+        ? (officers.length ? `<div class="cp-r"><span>OFFICER</span></div><select class="of"><option value="">Choose an official…</option>${assigneeOpts(r.assigned_official)}</select>
            <button class="cp-g" data-a="doassign">Confirm Assignment</button>`
-        : `<button class="cp-g" data-a="assign">${r.assigned_to ? 'Reassign Barangay Officer' : 'Assign Barangay Officer'}</button>`) : ''}
+           : '<p class="muted">No officials with names yet. Add their names and committees in the Officials tab first.</p>')
+        : `<button class="cp-g" data-a="assign">${r.assigned_name ? 'Reassign Barangay Officer' : 'Assign Barangay Officer'}</button>`) : ''}
       ${!can ? `<p class="muted">${mode === 'view' ? 'View only.' : 'Only the assigned officer or the Barangay Secretary can update this complaint.'}</p>` : ''}</div>`;
     return `<div class="cp-card ${o ? 'open' : ''}" data-id="${r.id}"><div class="cp-top" data-t="1"><b>${esc(r.title)}</b>${chip(r.status)}</div>
       <p data-t="1">${esc(r.description)}</p>
-      ${r.assigned_name ? `<small class="cp-as">Assigned to ${esc(r.assigned_name)}</small>` : r.status !== 'resolved' ? '<small class="cp-un">UNASSIGNED</small>' : ''}
+      ${r.assigned_name ? `<small class="cp-as">Assigned to ${esc(asLine(r))}</small>` : r.status !== 'resolved' ? '<small class="cp-un">UNASSIGNED</small>' : ''}
       ${o ? panel : ''}<div class="cp-foot" data-t="1"><span>Filer: ${esc(r.filer_name || '—')} • ${day(r.created_at)}</span><span class="cp-chev">${o ? '⌃' : '⌄'}</span></div></div>`;
   };
   const draw = () => {
@@ -113,7 +121,7 @@ export async function mountMyComplaints(el, me, startForm = false) {
       ${rows.map(r => `<div class="cp-card ${open === r.id ? 'open' : ''}" data-id="${r.id}"><div class="cp-top"><b>${esc(r.title)}</b>${chip(r.status)}</div>
         <p>${esc(r.description)}</p>
         ${open === r.id ? `<div class="cp-pn"><small class="muted">Reference ${esc(r.ref)} • Filed ${day(r.created_at)}</small>
-          ${r.assigned_name ? `<p><b>Assigned officer:</b> ${esc(r.assigned_name)}</p>` : '<p class="muted">Not yet assigned to an officer.</p>'}
+          ${r.assigned_name ? `<p><b>Assigned officer:</b> ${esc(asLine(r))}</p>` : '<p class="muted">Not yet assigned to an officer.</p>'}
           ${r.remarks ? `<p><b>Barangay remarks:</b> ${esc(r.remarks)}</p>` : ''}</div>` : ''}
         <div class="cp-foot"><span>${esc(r.ref)} • ${day(r.created_at)}</span><span class="cp-chev">${open === r.id ? '⌃' : '⌄'}</span></div></div>`).join('') || '<div class="card"><p class="muted">You have not filed any complaints yet.</p></div>'}`;
     el.querySelector('#cm-new').onclick = () => form();
