@@ -13,6 +13,7 @@ import { mountServices, mountServiceRequests, recentActivity } from './services.
 import { mountDashboard, staffPanels } from './dashboard.js';
 import { mountClassification } from './classify.js';
 import { mountMasterlist } from './masterlist.js';
+import { mountActivity } from './activity.js';
 import { mountProfileUpdates } from './profilereview.js';
 
 const app = document.getElementById('app');
@@ -50,7 +51,8 @@ export async function boot() {
   return home();
 }
 const fatal = t => { show(`<div class="wrap">${msg(esc(t), 'er')}<button id="lo" class="btn">LOG OUT</button></div>`); $('lo').onclick = logout; };
-async function logout() { await supabase.auth.signOut(); me = null; login(); }
+let staffPoll = null;
+async function logout() { clearInterval(staffPoll); await supabase.auth.signOut(); me = null; login(); }
 
 /* ------------------------------------------------------------------ login */
 function login(err = '', ok = '') {
@@ -575,19 +577,25 @@ function pwView(el) {
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
-    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
     : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : ['Complaints', 'Hearings', 'My Profile'];
   const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY], 'Profile Updates': ['user', CL_ORANGE],
-    Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
+    'Activity Monitor': ['stats', CL_ORANGE], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me),
-    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
+    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
     Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
     Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]
     .filter(([k]) => ['home', 'Alerts'].includes(k) || tabs.includes(k));
-  const bn = cur => `<nav class="bn">${NAV.map(([k, l, i]) => `<button data-n="${k}" class="${cur === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`;
+  let unread = false;
+  const paintDot = () => document.querySelectorAll('.ndot,#bdot').forEach(d => { d.hidden = !unread; });
+  const checkUnread = async () => {
+    try { const r = await supabase.from('notifications').select('id', { count: 'exact', head: true }).eq('user_id', me.id).eq('read', false);
+      const u = (r.count || 0) > 0; if (u !== unread) { unread = u; paintDot(); } } catch (e) { /* ignore */ }
+  };
+  const bn = cur => `<nav class="bn">${NAV.map(([k, l, i]) => `<button data-n="${k}" class="${cur === k ? 'on' : ''}">${ico(i)}<span>${l}</span>${k === 'Alerts' ? `<i class="ndot" ${unread ? '' : 'hidden'}></i>` : ''}</button>`).join('')}</nav>`;
   const GREENS = ['Complaints', 'Analytics'];
   const go = k => (k === 'home' ? menu() : k === 'Alerts' ? alertsPage() : open(k));
   const bindNav = () => document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => go(b.dataset.n); });
@@ -610,13 +618,13 @@ async function staff() {
     $('al-body').innerHTML = p.alerts + '<div class="qa-h"><span>Notifications</span></div>'
       + (notes.map(n => `<div class="card">${esc(n.text)}<small class="muted" style="display:block">${new Date(n.created_at).toLocaleString('en-PH')}</small></div>`).join('') || '<p class="muted">No notifications yet.</p>');
     document.querySelectorAll('.al').forEach(x => { x.onclick = () => open(x.dataset.go); });
-    if (notes.some(n => !n.read)) supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false);
+    if (notes.some(n => !n.read)) supabase.from('notifications').update({ read: true }).eq('user_id', me.id).eq('read', false).then(() => { unread = false; paintDot(); });
   };
-  const out = `<button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
-  const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out);
+  const out = () => `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}<i class="dot" id="bdot" ${unread ? '' : 'hidden'}></i></button><button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
+  const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out());
   const menu = () => {
     show(`${head()}<div class="wrap staff res-pad"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div></div>${bn('home')}`);
-    $('lo').onclick = logout; bindNav();
+    $('lo').onclick = logout; $('bell').onclick = alertsPage; bindNav();
     document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
     staffPanels(me).then(p => {
       if (!$('st-sum')) return;
@@ -625,6 +633,7 @@ async function staff() {
     }).catch(() => {});
   };
   menu();
+  clearInterval(staffPoll); checkUnread(); staffPoll = setInterval(checkUnread, 30000);
 }
 
 async function residentsTab(el, filter = 'pending') {
