@@ -14,6 +14,7 @@ import { mountDashboard, staffPanels } from './dashboard.js';
 import { mountClassification } from './classify.js';
 import { mountMasterlist } from './masterlist.js';
 import { mountActivity } from './activity.js';
+import { DEFAULTS as MSG_DEFAULTS, loadMessages, mountMessages } from './messages.js';
 import { mountProfileUpdates } from './profilereview.js';
 
 const app = document.getElementById('app');
@@ -43,6 +44,7 @@ export async function boot() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return login();
   acct = session.user;
+  MSG = await loadMessages();
   const { data: p } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!p) { me = null; return home(); }                     // account created, resident registry not done yet
   if (!p.active) return fatal('This account is deactivated. Please contact the Barangay Hall.');
@@ -52,6 +54,8 @@ export async function boot() {
 }
 const fatal = t => { show(`<div class="wrap">${msg(esc(t), 'er')}<button id="lo" class="btn">LOG OUT</button></div>`); $('lo').onclick = logout; };
 let staffPoll = null;
+let MSG = { ...MSG_DEFAULTS };
+const noticeBox = () => `<div class="notice"><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p></div>`;
 async function logout() { clearInterval(staffPoll); await supabase.auth.signOut(); me = null; login(); }
 
 /* ------------------------------------------------------------------ login */
@@ -303,7 +307,7 @@ const rgFoot = '</div></div>';
 
 async function rg1(err = '') {
   const pk = await purokList(), a = rg;
-  show(`${rgHead(1, 'Personal Details')}${err ? msg(esc(err), 'er') : ''}<div class="rg-card">
+  show(`${rgHead(1, 'Personal Details')}${rg.edit ? noticeBox() : ''}${err ? msg(esc(err), 'er') : ''}<div class="rg-card">
     ${lab('g-f', 'FIRSTNAME', 'NGARAN')}<input id="g-f" value="${esc(a.first)}" autocomplete="given-name">
     ${lab('g-m', 'MIDDLENAME', 'BUG-OS NGA BUTNGA')}<input id="g-m" value="${esc(a.middle)}">
     ${lab('g-l', 'LASTNAME', 'APELYIDO')}<input id="g-l" value="${esc(a.last)}" autocomplete="family-name">
@@ -330,7 +334,7 @@ async function rg1(err = '') {
 }
 function rg2(err = '') {
   const a = age(rg.birth) ?? 0, adult = a >= 18;
-  show(`${rgHead(2, 'Residency details')}${err ? msg(esc(err), 'er') : ''}<div class="rg-card">
+  show(`${rgHead(2, 'Residency details')}${rg.edit ? noticeBox() : ''}${err ? msg(esc(err), 'er') : ''}<div class="rg-card">
     ${lab('g-ps', 'PREVIOUS ADDRESS', 'OPTIONAL')}<input id="g-ps" placeholder="Street" value="${esc(rg.prev_street)}">
     ${lab('g-pb', 'PREVIOUS BARANGAY')}<input id="g-pb" value="${esc(rg.prev_barangay)}">
     ${lab('g-pc', 'MUNICIPALITY/CITY')}<input id="g-pc" value="${esc(rg.prev_city)}">
@@ -395,7 +399,7 @@ function rg3(err = '') {
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', acct.id).maybeSingle(); me = fresh || me;
     show(`<div class="wrap" style="text-align:center"><div style="font-size:56px">✅</div><h2>Registration Submitted</h2>
       <div class="card">${row('Reference No.', esc(ref))}${row('Status', badge('pending'))}</div>
-      <p class="muted">Your information was submitted for barangay verification. You will be notified once it is verified.</p><button id="x-home" class="btn">GO TO HOME</button></div>`);
+      <p class="muted">Your information was submitted for barangay verification. You will be notified once it is verified.</p><p class="muted">${esc(MSG.contact_note)}</p><button id="x-home" class="btn">GO TO HOME</button></div>`);
     $('x-home').onclick = () => home();
   };
 }
@@ -425,7 +429,7 @@ const realEmail = e => (e && !e.endsWith('@sbisp-guinsorongan.app') ? e : '');
 const resName = () => me ? (me.first_name || (me.full_name || '').split(' ')[0])
   : (acct.user_metadata?.username || ((acct.email || '').endsWith('@sbisp-guinsorongan.app') ? '' : (acct.email || '').split('@')[0]));
 const regDone = () => !!me && me.status !== 'unverified';
-const lockMsg = () => pendingUpdate ? 'Your profile update is waiting for approval. You can use this service again once it is approved.' : me?.status === 'verified' ? 'This service is coming in the next update.'
+const lockMsg = () => pendingUpdate ? esc(MSG.approval_notice) + '<br><br>' + esc(MSG.contact_note) : me?.status === 'verified' ? 'This service is coming in the next update.'
   : regDone() ? 'Services unlock once the barangay verifies your residency.' : 'Complete your resident registration to unlock this service.';
 const regEntry = () => { if (!regDone() || me.status === 'correction') { if (me) me.status = me.status === 'correction' ? 'correction' : 'unverified'; regStart(); } else home('profile'); };
 
@@ -443,8 +447,8 @@ async function home(tab = 'home', opt = {}) {
   const head = tab === 'home' ? hdr(name, 'Maupay nga Adlaw!', `Welcome, ${esc(name)}!`, bell, search)
     : `<div class="pg-h"><b style="color:${T[tab][1]}">${esc(T[tab][0])}</b>${edit}</div>`;
 
-  const banner = pendingUpdate ? `<div class="banner"><b>Profile update waiting for approval</b><p>Complaints and services are paused until the barangay approves your changes.</p></div>` : !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
-    : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p></div>`
+  const banner = pendingUpdate ? `<div class="banner"><b>Profile update waiting for approval</b><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p></div>` : !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
+    : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p><p>${esc(MSG.contact_note)}</p></div>`
     : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>` : '';
   const locked = t => `<div class="card"><b>${t}</b><p class="muted">${lockMsg()}</p>${regDone() ? '' : '<button class="btn" id="reg-now">REGISTER NOW</button>'}</div>`;
   const verified = me?.status === 'verified' && !pendingUpdate;
@@ -514,7 +518,7 @@ function profileView(el) {
     const u = data && data[0]; if (!u || !$('pf-pu')) return;
     pendingUpdate = u.status === 'pending' ? u : null;
     if (u.status === 'pending') {
-      $('pf-pu').innerHTML = `<div class="banner" style="margin:12px 0"><b>Profile update waiting for approval</b><p>The Barangay Secretary or the administrator will check your changes. You cannot file complaints or request services until it is approved.</p><button class="btn gy" id="pu-cancel" style="margin-top:0">Cancel my update</button></div>`;
+      $('pf-pu').innerHTML = `<div class="banner" style="margin:12px 0"><b>Profile update waiting for approval</b><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p><button class="btn gy" id="pu-cancel" style="margin-top:0">Cancel my update</button></div>`;
       $('pu-cancel').onclick = async () => { await supabase.rpc('profile_update_cancel'); pendingUpdate = null; profileView(el); };
       if ($('pf-reg')) $('pf-reg').disabled = true;
     } else if (u.status === 'rejected') $('pf-pu').innerHTML = `<div style="margin:12px 0">${msg('Your last profile update was not approved: ' + esc(u.note || ''), 'er')}</div>`;
@@ -544,7 +548,7 @@ function staffEdit(el) {
   const un = acct.user_metadata?.username || '';
   el.innerHTML = `<a href="#" id="se-bk">‹ Back to profile</a><div id="se-m"></div>
     <div class="pf-fields" style="padding:6px 16px 16px">${field('se-n', 'Full Name', me.full_name)}${field('se-mo', 'Contact Number', me.mobile || '', 'tel', '09XXXXXXXXX')}${field('se-em', 'Email Address', me.contact_email || realEmail(acct.email), 'email')}${field('se-un', 'Username (optional)', un)}</div>
-    <p class="muted">Your changes are checked by the administrator or the Barangay Secretary before they apply.</p><button class="btn" id="se-go">SUBMIT FOR APPROVAL</button>`;
+    ${noticeBox()}<button class="btn" id="se-go">SUBMIT FOR APPROVAL</button>`;
   $('se-bk').onclick = e => { e.preventDefault(); profileView(el); };
   $('se-go').onclick = async () => {
     const p = { full_name: v('se-n').trim(), mobile: v('se-mo').trim(), contact_email: v('se-em').trim(), username: v('se-un').trim() };
@@ -577,14 +581,14 @@ function pwView(el) {
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
-    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Portal Messages', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
     : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Residency Classification', 'Profile Updates', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : ['Complaints', 'Hearings', 'My Profile'];
   const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY], 'Profile Updates': ['user', CL_ORANGE],
-    'Activity Monitor': ['stats', CL_ORANGE], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
+    'Activity Monitor': ['stats', CL_ORANGE], 'Portal Messages': ['mega', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me),
-    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
+    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), 'Portal Messages': el => mountMessages(el, MSG, m => { MSG = m; }), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
     Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
     Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]
