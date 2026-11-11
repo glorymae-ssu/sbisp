@@ -53,6 +53,8 @@ export async function boot() {
   return home();
 }
 const fatal = t => { show(`<div class="wrap">${msg(esc(t), 'er')}<button id="lo" class="btn">LOG OUT</button></div>`); $('lo').onclick = logout; };
+const FOOT_PHONE = '09123456789';
+const footNote = () => `<p class="foot">Thank you for using our portal! For inquiries, suggestions, or feedback, please contact us at <a href="tel:${FOOT_PHONE}">${FOOT_PHONE}</a>. We appreciate your support!</p>`;
 let staffPoll = null;
 let MSG = { ...MSG_DEFAULTS };
 const noticeBox = () => `<div class="notice"><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p></div>`;
@@ -464,7 +466,7 @@ async function home(tab = 'home', opt = {}) {
     profile: '<div id="pf"></div>'
   }[tab];
   const nav = [['home', 'Home', 'home'], ['complaints', 'Complaints', 'complaint'], ['analytics', 'Analytics', 'stats'], ['alerts', 'Alerts', 'alert'], ['profile', 'Profile', 'user']];
-  show(`${head}<div class="wrap res-pad">${body}</div><nav class="bn">${nav.map(([k, l, i]) => `<button data-n="${k}" class="${tab === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`);
+  show(`${head}<div class="wrap res-pad">${body}${footNote()}</div><nav class="bn">${nav.map(([k, l, i]) => `<button data-n="${k}" class="${tab === k ? 'on' : ''}">${ico(i)}<span>${l}</span></button>`).join('')}</nav>`);
 
   document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => home(b.dataset.n); });
   if ($('bell')) $('bell').onclick = () => home('alerts');
@@ -605,7 +607,7 @@ async function staff() {
   const bindNav = () => document.querySelectorAll('.bn button').forEach(b => { b.onclick = () => go(b.dataset.n); });
   const page = (title, cur, body, back) => {
     show(`<div class="pg-h"><div class="pg-l">${back ? '<a href="#" id="sb" class="pg-bk">←</a>' : ''}<b style="color:${GREENS.includes(title) ? CP_GRN : BLU}">${esc(title)}</b></div></div>
-      <div class="wrap staff res-pad">${body}</div>${bn(cur)}`);
+      <div class="wrap staff res-pad">${body}${footNote()}</div>${bn(cur)}`);
     bindNav(); if (back) $('sb').onclick = e => { e.preventDefault(); go('home'); };
   };
   const open = t => {
@@ -627,7 +629,7 @@ async function staff() {
   const out = () => `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}<i class="dot" id="bdot" ${unread ? '' : 'hidden'}></i></button><button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
   const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out());
   const menu = () => {
-    show(`${head()}<div class="wrap staff res-pad"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div></div>${bn('home')}`);
+    show(`${head()}<div class="wrap staff res-pad"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div>${footNote()}</div>${bn('home')}`);
     $('lo').onclick = logout; $('bell').onclick = alertsPage; bindNav();
     document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
     staffPanels(me).then(p => {

@@ -79,7 +79,7 @@ export async function staffPanels(me) {
   const [c, s] = await Promise.all([supabase.rpc('complaints_list'), role === 'officer' ? { data: [] } : supabase.rpc('service_requests_list')]);
   const comp = c.data || [], reqs = s.data || [];
   let pend = 0, act = 0;
-  if (me.role === 'admin' && !me.is_pb) { try { act = (await supabase.rpc('activity_unread_count')).data || 0; } catch (e) { act = 0; } }
+  if (me.role === 'admin' && !me.is_pb) { try { act = Number((await supabase.rpc('activity_unread_count')).data) || 0; } catch (e) { act = 0; } }
   if (role === 'manage') { try { const q = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'resident').eq('status', 'pending'); pend = q.count || 0; } catch (e) { pend = 0; } }
   let upd = 0;
   if (role === 'manage') { try { const u = await supabase.rpc('profile_updates_list'); upd = (u.data || []).filter(x => x.status === 'pending' && x.user_id !== me.id).length; } catch (e) { upd = 0; } }
