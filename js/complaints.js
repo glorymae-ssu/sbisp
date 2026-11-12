@@ -46,7 +46,8 @@ export async function mountComplaints(el, me) {
 
   const card = r => {
     const o = open === r.id, can = mode === 'manage' || (mode === 'officer' && r.assigned_to === me.id);
-    const panel = `<div class="cp-pn">
+    const done = r.status === 'resolved';           // a resolved complaint is final: no more status changes or officer assignment
+    const panelOpen = `<div class="cp-pn">
       ${r.ref ? `<small class="muted">Reference ${esc(r.ref)}${r.purok ? ' • ' + esc(r.purok) : ''} • ${esc(r.category)}</small>` : ''}
       <div class="cp-r"><span>UPDATE STATUS</span><select class="st" ${can ? '' : 'disabled'}>${opts([['pending', 'Pending'], ['ongoing', 'Ongoing'], ['resolved', 'Resolved']], r.status)}</select></div>
       <textarea class="rm" placeholder="Remarks or action taken (optional)" ${can ? '' : 'disabled'}>${esc(r.remarks || '')}</textarea>
@@ -57,6 +58,9 @@ export async function mountComplaints(el, me) {
            : '<p class="muted">No officials with names yet. Add their names and committees in the Officials tab first.</p>')
         : `<button class="cp-g" data-a="assign">${r.assigned_name ? 'Reassign Barangay Officer' : 'Assign Barangay Officer'}</button>`) : ''}
       ${!can ? `<p class="muted">${mode === 'view' ? 'View only.' : 'Only the assigned officer or the Barangay Secretary can update this complaint.'}</p>` : ''}</div>`;
+    const panel = done ? `<div class="cp-pn">${r.ref ? `<small class="muted">Reference ${esc(r.ref)}${r.purok ? ' • ' + esc(r.purok) : ''} • ${esc(r.category)}</small>` : ''}
+      <p><b>Status:</b> Resolved</p>${r.assigned_name ? `<p><b>Handled by:</b> ${esc(asLine(r))}</p>` : ''}${r.remarks ? `<p><b>Remarks:</b> ${esc(r.remarks)}</p>` : ''}
+      <p class="muted">This complaint is resolved and can no longer be changed. The resident can file a new complaint if the problem happens again.</p></div>` : panelOpen;
     return `<div class="cp-card ${o ? 'open' : ''}" data-id="${r.id}"><div class="cp-top" data-t="1"><b>${esc(r.title)}</b>${chip(r.status)}</div>
       <p data-t="1">${esc(r.description)}</p>
       ${r.assigned_name ? `<small class="cp-as">Assigned to ${esc(asLine(r))}</small>` : r.status !== 'resolved' ? '<small class="cp-un">UNASSIGNED</small>' : ''}

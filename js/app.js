@@ -629,7 +629,7 @@ async function staff() {
   const out = () => `<button id="bell" aria-label="Alerts">${ico('alert', '#fff', 26)}<i class="dot" id="bdot" ${unread ? '' : 'hidden'}></i></button><button id="lo" aria-label="Log out">${ico('out', '#fff', 24)}</button>`;
   const head = () => hdr(me.full_name, `${greeting()}, ${esc((me.full_name || '').split(' ')[0])}!`, esc(roleLabel(me)) + (me.is_pb ? ' (view-only)' : ''), out());
   const menu = () => {
-    show(`${head()}<div class="wrap staff res-pad"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div>${footNote()}</div>${bn('home')}`);
+    show(`${head()}<div class="wrap staff res-pad menu"><div id="st-sum"></div><div class="qa-h">Quick Actions</div><div class="qa">${tabs.map(t => tile(t, t, ...ICONS[t])).join('')}</div><div id="st-al"></div>${footNote()}</div>${bn('home')}`);
     $('lo').onclick = logout; $('bell').onclick = alertsPage; bindNav();
     document.querySelectorAll('.qa-t').forEach(b => { b.onclick = () => open(b.dataset.k); });
     staffPanels(me).then(p => {

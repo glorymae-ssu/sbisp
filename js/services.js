@@ -102,11 +102,16 @@ export async function mountServiceRequests(el, me) {
   const $ = s => el.querySelector(s);
   const card = r => {
     const o = open === r.id;
-    const panel = `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
+    const final = ['released', 'rejected'].includes(r.status);   // released or rejected requests are final
+    const panelOpen = `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
       ${r.details ? `<p>${esc(r.details)}</p>` : ''}${r.doc_path ? '<p><a href="#" class="docl" data-p="' + esc(r.doc_path) + '">View supporting document</a></p>' : ''}
       <div class="cp-r"><span>UPDATE STATUS</span><select class="st" ${manage ? '' : 'disabled'}>${opts(Object.entries(ST).map(([k, v]) => [k, v[0]]), r.status)}</select></div>
       <textarea class="rm" placeholder="Note to the resident (required when rejecting)" ${manage ? '' : 'disabled'}>${esc(r.staff_note || '')}</textarea>
       ${manage ? '<button class="cp-g" data-a="save">Save Status</button>' : '<p class="muted">View only.</p>'}</div>`;
+    const panel = final ? `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
+      ${r.details ? `<p>${esc(r.details)}</p>` : ''}${r.doc_path ? '<p><a href="#" class="docl" data-p="' + esc(r.doc_path) + '">View supporting document</a></p>' : ''}
+      <p><b>Status:</b> ${r.status === 'released' ? 'Released' : 'Rejected'}</p>${r.staff_note ? `<p><b>Note to the resident:</b> ${esc(r.staff_note)}</p>` : ''}
+      <p class="muted">This request is closed and can no longer be changed. The resident can submit a new request when needed.</p></div>` : panelOpen;
     return `<div class="cp-card ${o ? 'open' : ''}" data-id="${r.id}"><div class="cp-top" data-t="1"><b>${esc(r.service)}</b>${chip(r.status)}</div>
       <p data-t="1" class="muted">${esc(r.purpose)}</p>${o ? panel : ''}<div class="cp-foot" data-t="1"><span>${esc(r.resident_name || '—')} • ${day(r.created_at)}</span><span class="cp-chev">${o ? '⌃' : '⌄'}</span></div></div>`;
   };
