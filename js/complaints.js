@@ -8,6 +8,7 @@
 // =====================================================================
 import { supabase } from './supabaseClient.js';
 import { esc } from './admin-features.js';
+import { generatePdf, canPdf } from './pdf.js';
 
 const ST = { pending: ['PENDING', 'pd'], ongoing: ['ONGOING', 'og'], resolved: ['RESOLVED', 'rs'] };
 const CATS = ['Illegal Dumping', 'Drainage / Flooding', 'Street Light / Infrastructure', 'Noise / Nuisance', 'Stray Animals', 'Peace and Order', 'Sanitation', 'Other'];
@@ -27,7 +28,7 @@ const opts = (list, val) => list.map(o => { const [v, l] = Array.isArray(o) ? o 
 /* ---------------------------------------------------------------- staff */
 export async function mountComplaints(el, me) {
   const mode = me.is_pb ? 'view' : ['admin', 'employee'].includes(me.role) ? 'manage' : 'officer';
-  let rows = [], officers = [], q = '', f = 'all', pk = '', cat = '', open = null, assigning = null, flash = '', showFilters = false;
+  let shown = [], rows = [], officers = [], q = '', f = 'all', pk = '', cat = '', open = null, assigning = null, flash = '', showFilters = false;
   el.innerHTML = '<p class="muted">Loading…</p>';
   const load = async () => {
     const r = await supabase.rpc('complaints_list');
@@ -40,7 +41,7 @@ export async function mountComplaints(el, me) {
 
   el.innerHTML = `<div class="cp-bar"><div class="cp-s">${SEARCH}<input id="cp-q" placeholder="Search complaints or ID…" autocomplete="off"></div>
       <button id="cp-f" class="cp-fb" aria-label="Filters">${SLIDERS}</button></div><div id="cp-flt"></div><div class="cp-chips" id="cp-chips"></div>
-      <div id="cp-flash"></div><div id="cp-list"></div>`;
+      <div id="cp-flash"></div><div id="cp-list"></div>${mode === 'manage' && canPdf(me) ? '<button class="cp-g" id="cp-pdf">Generate PDF Report</button>' : ''}`;
   const $ = s => el.querySelector(s);
   if (mode === 'officer') $('#cp-flash').insertAdjacentHTML('beforebegin', '<p class="muted">Complaints assigned to you.</p>');
 
@@ -74,6 +75,7 @@ export async function mountComplaints(el, me) {
       <select id="cp-ct"><option value="">All types</option>${opts(CATS, cat)}</select></div>` : '';
     const list = rows.filter(r => (f === 'all' || r.status === f) && (!pk || r.purok === pk) && (!cat || r.category === cat)
       && (!q || [r.title, r.ref, r.filer_name, r.description, r.assigned_name].join(' ').toLowerCase().includes(q)));
+    shown = list;
     $('#cp-flash').innerHTML = flash;
     $('#cp-list').innerHTML = list.map(card).join('') || '<p class="muted">No complaints in this list.</p>';
   };
@@ -95,6 +97,10 @@ export async function mountComplaints(el, me) {
     if (b) return act(b.dataset.a, c);
     if (e.target.closest('[data-t]')) { open = open === c.dataset.id ? null : c.dataset.id; assigning = null; draw(); }
   };
+  if ($('#cp-pdf')) $('#cp-pdf').onclick = () => { const n = s => shown.filter(x => x.status === s).length;
+    generatePdf({ me, title: 'COMPLAINTS REPORT', subtitle: (f === 'all' ? 'All statuses' : ST[f][0].charAt(0) + ST[f][0].slice(1).toLowerCase()) + (pk ? ' | ' + pk : '') + (cat ? ' | ' + cat : ''), filename: 'SBISP-Complaints-Report', landscape: true,
+      summary: [['Complaints listed', shown.length], ['Pending', n('pending')], ['Ongoing', n('ongoing')], ['Resolved', n('resolved')]],
+      sections: [{ columns: ['Reference', 'Filed', 'Complaint', 'Purok', 'Status', 'Assigned to', 'Filer'], rows: shown.map(x => [x.ref, day(x.created_at), x.title, x.purok || '', ST[x.status][0], x.assigned_name || 'Unassigned', x.filer_name || '']) }] }); };
   draw();
 }
 

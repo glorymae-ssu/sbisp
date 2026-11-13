@@ -5,6 +5,7 @@
 // =====================================================================
 import { supabase } from './supabaseClient.js';
 import { esc, printHTML, reportHeader, table } from './admin-features.js';
+import { generatePdf, canPdf } from './pdf.js';
 
 const LISTS = ['All living residents', 'Registered Voters', 'Non-registered Voters', 'Senior Citizens (60+)', 'Persons with Disability (PWD)',
   'Youth (15-30)', 'In-School Youth', 'Out-of-School Youth', 'Children (below 15)', 'Registered SK Voters',
@@ -29,13 +30,16 @@ export async function mountMasterlist(el, me) {
       ${l.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.full_name)}</td><td>${esc(p.age ?? '')}</td><td>${esc(p.sex ?? '')}</td><td>${esc([p.purok, p.street].filter(Boolean).join(', '))}</td><td>${esc(p.mobile ?? '—')}</td>
         <td>${canEdit ? `<input class="pn" data-id="${p.id}" value="${esc(p.precinct_no || '')}" placeholder="Optional" maxlength="20">` : esc(p.precinct_no || '—')}</td><td>${esc(p.notes ?? '')}</td>${canEdit ? `<td><button class="ml-ed" data-id="${p.id}" aria-label="Edit record">✎ Edit</button></td>` : ''}</tr>`).join('')
         || `<tr><td colspan="${canEdit ? 9 : 8}">None</td></tr>`}</table></div>
-      <p>Total: <b>${l.length}</b></p><button class="cp-g" id="ml-print">🖨️ Print / Save as PDF</button>`;
+      <p>Total: <b>${l.length}</b></p><button class="cp-g sec" id="ml-print">Print</button>${canPdf(me) ? '<button class="cp-g" id="ml-pdf">Generate PDF Report</button>' : ''}`;
     $('#ml-print').onclick = () => printHTML(
       reportHeader('MASTERLIST', type + (purok === 'All Puroks' ? ' · All Puroks' : ' · ' + purok))
       + table(['#', 'Name', 'Age', 'Sex', 'Address', 'Mobile', 'Precinct No.', 'Notes'],
         l.map((p, i) => [i + 1, p.full_name, p.age, p.sex, [p.purok, p.street].filter(Boolean).join(', '), p.mobile ?? '—', p.precinct_no ?? '', p.notes ?? '']))
       + `<p>Total: <b>${l.length}</b></p>`, 'SBISP-Masterlist-' + type.replace(/\W+/g, '_'));
     if (canEdit) $('#ml-out').querySelectorAll('.ml-ed').forEach(b => { b.onclick = () => edit(b.dataset.id); });
+    if ($('#ml-pdf')) $('#ml-pdf').onclick = () => generatePdf({ me, title: 'MASTERLIST - ' + type.toUpperCase(), subtitle: purok === 'All Puroks' ? 'All Puroks' : purok, filename: 'SBISP-Masterlist-' + type.replace(/\W+/g, '_'), landscape: true,
+      summary: [['List', type], ['Purok', purok], ['Total', l.length]],
+      sections: [{ columns: ['#', 'Name', 'Age', 'Sex', 'Address', 'Mobile', 'Precinct No.', 'Notes'], rows: l.map((p, i) => [i + 1, p.full_name, p.age ?? '', p.sex ?? '', [p.purok, p.street].filter(Boolean).join(', '), p.mobile ?? '', p.precinct_no ?? '', p.notes ?? '']) }] });
     if (canEdit) $('#ml-out').querySelectorAll('input.pn').forEach(inp => {
       inp.onchange = async () => {
         const row = rows.find(r => r.id === inp.dataset.id); if (!row) return;

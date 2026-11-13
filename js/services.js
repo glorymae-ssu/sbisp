@@ -6,6 +6,7 @@
 // =====================================================================
 import { supabase } from './supabaseClient.js';
 import { esc, getFees } from './admin-features.js';
+import { generatePdf, canPdf, pesos } from './pdf.js';
 
 const SVCS = [
   { name: 'Barangay Clearance', desc: 'For employment, transactions, and other lawful purposes', c: '#1565C0', bg: '#E3F0FF' },
@@ -18,6 +19,7 @@ const ST = { for_review: ['FOR REVIEW', 'fr'], ready: ['READY FOR CLAIM', 'rc'],
 const OK = { 'image/png': 'png', 'image/jpeg': 'jpg', 'application/pdf': 'pdf' };
 const day = d => new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' });
 const longDay = d => new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
+const payLine = r => (r.fee > 0 ? '<br>Payment: ' + (r.paid_or ? 'Paid (OR ' + esc(r.paid_or) + ')' : 'Not yet paid') : '');
 const chip = s => `<span class="cp-chip ${(ST[s] || ST.for_review)[1]}">${(ST[s] || ST.for_review)[0]}</span>`;
 const note = (t, k = '') => `<div class="msg ${k}">${esc(t)}</div>`;
 const peso = n => (n == null ? '' : n === 0 ? 'Free' : '₱' + Number(n).toLocaleString('en-PH'));
@@ -40,7 +42,7 @@ export async function mountServices(el, me) {
         <small>${esc(s.desc)}</small>${fees[s.name] != null ? `<small class="sv-fee">Fee: ${esc(peso(fees[s.name]))}</small>` : ''}<span class="sv-go" style="color:${s.c}">›</span></div>`).join('')}
       <div class="qa-h"><span>RECENT REQUESTS</span></div>
       ${rows.map(r => `<div class="cp-card" data-id="${r.id}" data-open="0"><div class="cp-top"><b style="color:#111">${esc(r.service)}</b>${chip(r.status)}</div>
-        <small class="muted">${esc(r.ref)} • ${day(r.created_at)}</small><div class="sv-more" style="display:none"><p class="muted">Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
+        <small class="muted">${esc(r.ref)} • ${day(r.created_at)}</small><div class="sv-more" style="display:none"><p class="muted">Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}${payLine(r)}</p>
         ${r.staff_note ? `<p><b>Barangay note:</b> ${esc(r.staff_note)}</p>` : ''}</div></div>`).join('') || '<div class="card"><p class="muted">You have not requested a document yet.</p></div>'}`;
     el.querySelectorAll('.sv-card').forEach(c => { c.onclick = () => { flash = ''; form(c.dataset.s); }; });
     el.querySelectorAll('.cp-card').forEach(c => { c.onclick = () => { const m = c.querySelector('.sv-more'); m.style.display = m.style.display === 'none' ? 'block' : 'none'; }; });
@@ -93,34 +95,35 @@ export async function mountServices(el, me) {
 /* ---------------------------------------------------------------- staff */
 export async function mountServiceRequests(el, me) {
   const manage = !me.is_pb;
-  let rows = [], q = '', f = 'all', open = null, flash = '';
+  let shown = [], rows = [], q = '', f = 'all', open = null, flash = '';
   el.innerHTML = '<p class="muted">Loading…</p>';
   const load = async () => { const r = await supabase.rpc('service_requests_list'); if (r.error) { flash = note(r.error.message, 'er'); rows = []; } else rows = r.data || []; };
   await load();
   el.innerHTML = `<div class="cp-bar"><div class="cp-s"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-    <input id="sr-q" placeholder="Search requests or ID…" autocomplete="off"></div></div><div class="cp-chips" id="sr-chips"></div><div id="sr-flash"></div><div id="sr-list"></div>`;
+    <input id="sr-q" placeholder="Search requests or ID…" autocomplete="off"></div></div><div class="cp-chips" id="sr-chips"></div><div id="sr-flash"></div><div id="sr-list"></div>${manage && canPdf(me) ? '<button class="cp-g" id="sr-pdf">Generate PDF Report</button>' : ''}`;
   const $ = s => el.querySelector(s);
   const card = r => {
     const o = open === r.id;
     const final = ['released', 'rejected'].includes(r.status);   // released or rejected requests are final
-    const panelOpen = `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
+    const panelOpen = `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}${payLine(r)}</p>
       ${r.details ? `<p>${esc(r.details)}</p>` : ''}${r.doc_path ? '<p><a href="#" class="docl" data-p="' + esc(r.doc_path) + '">View supporting document</a></p>' : ''}
       <div class="cp-r"><span>UPDATE STATUS</span><select class="st" ${manage ? '' : 'disabled'}>${opts(Object.entries(ST).map(([k, v]) => [k, v[0]]), r.status)}</select></div>
       <textarea class="rm" placeholder="Note to the resident (required when rejecting)" ${manage ? '' : 'disabled'}>${esc(r.staff_note || '')}</textarea>
       ${manage ? '<button class="cp-g" data-a="save">Save Status</button>' : '<p class="muted">View only.</p>'}</div>`;
-    const panel = final ? `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}</p>
+    const panel = final ? `<div class="cp-pn"><p class="muted">Reference ${esc(r.ref)}<br>Purpose: ${esc(r.purpose)}<br>Claim: ${esc(r.claim_method)} on ${esc(longDay(r.claim_date))}${r.fee != null ? '<br>Fee: ' + esc(peso(r.fee)) : ''}${payLine(r)}</p>
       ${r.details ? `<p>${esc(r.details)}</p>` : ''}${r.doc_path ? '<p><a href="#" class="docl" data-p="' + esc(r.doc_path) + '">View supporting document</a></p>' : ''}
       <p><b>Status:</b> ${r.status === 'released' ? 'Released' : 'Rejected'}</p>${r.staff_note ? `<p><b>Note to the resident:</b> ${esc(r.staff_note)}</p>` : ''}
       <p class="muted">This request is closed and can no longer be changed. The resident can submit a new request when needed.</p></div>` : panelOpen;
     return `<div class="cp-card ${o ? 'open' : ''}" data-id="${r.id}"><div class="cp-top" data-t="1"><b>${esc(r.service)}</b>${chip(r.status)}</div>
       <p data-t="1" class="muted">${esc(r.purpose)}</p>${o ? panel : ''}<div class="cp-foot" data-t="1"><span>${esc(r.resident_name || '—')} • ${day(r.created_at)}</span><span class="cp-chev">${o ? '⌃' : '⌄'}</span></div></div>`;
   };
+  const list0 = () => rows.filter(r => (f === 'all' || r.status === f) && (!q || [r.service, r.ref, r.resident_name, r.purpose].join(' ').toLowerCase().includes(q)));
   const draw = () => {
     const count = s => rows.filter(r => s === 'all' || r.status === s).length;
     $('#sr-chips').innerHTML = [['all', 'All'], ...Object.entries(ST).map(([k, v]) => [k, v[0].charAt(0) + v[0].slice(1).toLowerCase()])]
       .map(([k, l]) => `<button data-f="${k}" class="${f === k ? 'on' : ''}">${l} (${count(k)})</button>`).join('');
-    $('#sr-flash').innerHTML = flash;
-    const list = rows.filter(r => (f === 'all' || r.status === f) && (!q || [r.service, r.ref, r.resident_name, r.purpose].join(' ').toLowerCase().includes(q)));
+    shown = list0(); $('#sr-flash').innerHTML = flash;
+    const list = list0();
     $('#sr-list').innerHTML = list.map(card).join('') || '<p class="muted">No requests in this list.</p>';
   };
   $('#sr-q').oninput = e => { q = e.target.value.trim().toLowerCase(); draw(); };
@@ -137,6 +140,10 @@ export async function mountServiceRequests(el, me) {
     }
     if (e.target.closest('[data-t]')) { open = open === c.dataset.id ? null : c.dataset.id; draw(); }
   };
+  if ($('#sr-pdf')) $('#sr-pdf').onclick = () => { const n = k => shown.filter(x => x.status === k).length, paid = shown.filter(x => x.paid_or).reduce((t, x) => t + Number(x.fee || 0), 0);
+    generatePdf({ me, title: 'BARANGAY SERVICE REQUESTS REPORT', subtitle: f === 'all' ? 'All statuses' : ST[f][0], filename: 'SBISP-Service-Requests-Report', landscape: true,
+      summary: [['Requests listed', shown.length], ['For review', n('for_review')], ['Ready for claim', n('ready')], ['Released', n('released')], ['Rejected', n('rejected')], ['Fees paid (recorded)', pesos(paid)]],
+      sections: [{ columns: ['Reference', 'Requested', 'Service', 'Resident', 'Purpose', 'Fee', 'Payment', 'Status'], rows: shown.map(x => [x.ref, day(x.created_at), x.service, x.resident_name || '', x.purpose, x.fee != null ? pesos(x.fee) : '', x.paid_or ? 'Paid ' + x.paid_or : (x.fee > 0 ? 'Not yet paid' : ''), ST[x.status][0]]), align: ['left', 'left', 'left', 'left', 'left', 'right', 'left', 'left'] }] }); };
   draw();
 }
 

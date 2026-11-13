@@ -6,6 +6,7 @@
 // =====================================================================
 import { supabase } from './supabaseClient.js';
 import { esc } from './admin-features.js';
+import { generatePdf, canPdf } from './pdf.js';
 
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const PAL = ['#27C227', '#1B6B1B', '#E8782A', '#1565C0', '#8E8E8E', '#9C27B0', '#00ACC1', '#F9A825'];
@@ -42,9 +43,9 @@ export async function mountDashboard(el, me, mountPopulation) {
   el.innerHTML = '<p class="muted">Loading…</p>';
   const r = await supabase.rpc('complaints_list');
   if (r.error) { el.innerHTML = `<div class="msg er">${esc(r.error.message)}</div>`; return; }
-  const all = r.data || []; let months = 6;
+  const all = r.data || []; let months = 6, snap = null;
   el.innerHTML = `<div class="an-range"><span>DATE RANGE</span><select id="an-r"><option value="3">Last 3 Months</option><option value="6" selected>Last 6 Months</option><option value="12">Last 12 Months</option></select></div>
-    <div id="an-main"></div>${mountPopulation ? '<div class="qa-h"><span>Population</span></div><div id="an-pop"></div>' : ''}`;
+    <div id="an-main"></div>${canPdf(me) ? '<button class="cp-g" id="an-pdf">Generate PDF Report</button>' : ''}${mountPopulation ? '<div class="qa-h"><span>Population</span></div><div id="an-pop"></div>' : ''}`;
   const draw = () => {
     const now = new Date(), start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
     const rows = all.filter(x => new Date(x.created_at) >= start), total = rows.length, by = s => rows.filter(x => x.status === s).length;
@@ -59,6 +60,7 @@ export async function mountDashboard(el, me, mountPopulation) {
     const res = rows.filter(x => x.status === 'resolved'), rate = total ? Math.round(res.length / total * 1000) / 10 : 0;
     const times = res.filter(x => x.resolved_at).map(x => (new Date(x.resolved_at) - new Date(x.created_at)) / 86400000);
     const avg = times.length ? (times.reduce((s, x) => s + x, 0) / times.length).toFixed(1) : null;
+    snap = { total, pending: by('pending'), ongoing: by('ongoing'), resolved: by('resolved'), months: b, cats, pur, rate, avg, label: `Last ${months} months` };
     el.querySelector('#an-main').innerHTML = `
       <div class="an-kpis"><div><b>${total}</b><small>Total</small></div><div><b style="color:#E65100">${by('pending')}</b><small>Pending</small></div>
         <div><b style="color:#1B7A1B">${by('ongoing')}</b><small>Ongoing</small></div><div><b style="color:#1565C0">${by('resolved')}</b><small>Resolved</small></div></div>
@@ -69,6 +71,12 @@ export async function mountDashboard(el, me, mountPopulation) {
         <div class="an-card"><small>AVG RESOLVE TIME</small><div class="an-big">${clock}<b>${avg === null ? '—' : avg + ' Days'}</b></div></div></div>`;
   };
   el.querySelector('#an-r').onchange = e => { months = +e.target.value; draw(); };
+  if (el.querySelector('#an-pdf')) el.querySelector('#an-pdf').onclick = () => { if (!snap) return;
+    generatePdf({ me, title: 'COMPLAINTS ANALYTICS REPORT', subtitle: snap.label, filename: 'SBISP-Complaints-Analytics',
+      summary: [['Period', snap.label], ['Total complaints', snap.total], ['Pending', snap.pending], ['Ongoing', snap.ongoing], ['Resolved', snap.resolved], ['Resolution rate', snap.rate + '%'], ['Average resolve time', snap.avg === null ? 'No resolved complaints yet' : snap.avg + ' days']],
+      sections: [{ heading: 'Monthly complaint trend', columns: ['Month', 'Complaints'], rows: snap.months.map(x => [x.label, x.n]), align: ['left', 'right'] },
+        { heading: 'Complaint categories', columns: ['Category', 'Complaints', 'Share'], rows: snap.cats.map(c => [c.k, c.n, Math.round(c.n / (snap.total || 1) * 100) + '%']), align: ['left', 'right', 'right'] },
+        { heading: 'Complaints by purok', columns: ['Purok', 'Complaints'], rows: snap.pur.map(p => [p.k, p.n]), align: ['left', 'right'] }] }); };
   draw();
   if (mountPopulation) { try { await mountPopulation(el.querySelector('#an-pop')); } catch (e) { el.querySelector('#an-pop').innerHTML = '<p class="muted">Population statistics are not available for this account.</p>'; } }
 }
@@ -78,7 +86,8 @@ export async function staffPanels(me) {
   const role = me.is_pb ? 'view' : ['admin', 'employee'].includes(me.role) ? 'manage' : 'officer';
   const [c, s] = await Promise.all([supabase.rpc('complaints_list'), role === 'officer' ? { data: [] } : supabase.rpc('service_requests_list')]);
   const comp = c.data || [], reqs = s.data || [];
-  let pend = 0, act = 0;
+  let pend = 0, act = 0, unp = 0;
+  if (me.role === 'treasurer') { try { unp = ((await supabase.rpc('fin_unpaid_requests')).data || []).length; } catch (e) { unp = 0; } }
   if (me.role === 'admin' && !me.is_pb) { try { act = Number((await supabase.rpc('activity_unread_count')).data) || 0; } catch (e) { act = 0; } }
   if (role === 'manage') { try { const q = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'resident').eq('status', 'pending'); pend = q.count || 0; } catch (e) { pend = 0; } }
   let upd = 0;
@@ -87,6 +96,7 @@ export async function staffPanels(me) {
   const summary = `<div class="qa-h"><span>${role === 'officer' ? 'MY ASSIGNED COMPLAINTS' : 'COMPLAINTS SUMMARY'}</span></div>
     <div class="ss"><div class="ss-p"><b>${n('pending')}</b><small>Pending</small></div><div class="ss-o"><b>${n('ongoing')}</b><small>Ongoing</small></div><div class="ss-r"><b>${n('resolved')}</b><small>Resolved Case</small></div></div>`;
   const items = [];
+  if (unp) items.push({ go: 'Finance', t: 'Fees waiting to be recorded', chip: `<span class="cp-chip fr">${unp} PENDING</span>`, sub: 'Service requests with a fee and no payment record yet' });
   if (act) items.push({ go: 'Activity Monitor', t: 'Activity monitor', chip: `<span class="cp-chip as">${act} NEW</span>`, sub: 'Edits, updates and deletions by the users of the portal' });
   if (pend) items.push({ go: 'Residents', t: 'Residents waiting for verification', chip: `<span class="cp-chip fr">${pend} PENDING</span>`, sub: 'Open Residents to review the registrations' });
   if (upd) items.push({ go: 'Profile Updates', t: 'Profile updates waiting for approval', chip: `<span class="cp-chip fr">${upd} PENDING</span>`, sub: 'Open Profile Updates to approve or reject' });
@@ -94,7 +104,7 @@ export async function staffPanels(me) {
     chip: x.assigned_name ? '<span class="cp-chip as">ASSIGNED</span>' : '<span class="cp-chip un">UNASSIGNED</span>',
     sub: role === 'officer' ? `Assigned to you • ${ago(x.updated_at || x.created_at)}` : x.assigned_name ? `Assigned to ${esc(x.assigned_name || 'an officer')} • ${ago(x.updated_at || x.created_at)}` : `Submitted by ${esc(x.filer_name || 'a resident')} • ${ago(x.created_at)}` }));
   reqs.filter(x => x.status === 'for_review').slice(0, 3).forEach(x => items.push({ go: 'Service Requests', t: x.service, chip: '<span class="cp-chip fr">FOR REVIEW</span>', sub: `Requested by ${esc(x.resident_name || 'a resident')} • ${ago(x.created_at)}` }));
-  const fresh = act + pend + upd + comp.filter(x => x.status !== 'resolved' && !x.assigned_name).length + reqs.filter(x => x.status === 'for_review').length;
+  const fresh = unp + act + pend + upd + comp.filter(x => x.status !== 'resolved' && !x.assigned_name).length + reqs.filter(x => x.status === 'for_review').length;
   const alerts = `<div class="qa-h"><span>NEW RECENT ALERTS</span>${fresh ? `<span class="new-pill">${fresh} NEW</span>` : ''}</div>`
     + (items.slice(0, 6).map(i => `<div class="cp-card al" data-go="${esc(i.go)}"><div class="cp-top"><b style="color:#111">${esc(i.t)}</b>${i.chip}</div><small class="muted">${i.sub}</small></div>`).join('')
       || '<div class="card"><p class="muted">No new alerts. You are all caught up.</p></div>');
