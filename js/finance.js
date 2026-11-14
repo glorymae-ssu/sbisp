@@ -22,7 +22,7 @@ export async function mountFinance(el, me) {
   const mode = me.is_pb || me.role === 'kagawad' ? 'figures' : me.role === 'treasurer' ? 'record' : 'detail';
   const pdf = canPdf(me);
   const today = new Date(), thisYear = today.getFullYear();
-  let tab = 'summary', year = thisYear, month = today.getMonth() + 1, sum = null, tx = [], from = ymd(new Date(thisYear, today.getMonth(), 1)), to = ymd(today), q = '', flash = '', fees = {}, unpaid = [];
+  let tab = 'summary', year = thisYear, month = today.getMonth() + 1, sum = null, tx = [], from = ymd(new Date(thisYear, today.getMonth(), 1)), to = ymd(today), q = '', flash = '', fees = {}, unpaid = [], reqs = [], rf = 'all';
   el.innerHTML = '<p class="muted">Loading…</p>';
   try { fees = (await getFees()) || {}; } catch (e) { fees = {}; }
 
@@ -30,11 +30,13 @@ export async function mountFinance(el, me) {
   const loadTx = async () => { const r = await supabase.rpc('fin_list', { p_from: from, p_to: to }); if (r.error) { flash = note(r.error.message, 'er'); tx = []; } else tx = r.data || []; };
   const loadUnpaid = async () => { if (mode !== 'record') return; const r = await supabase.rpc('fin_unpaid_requests'); unpaid = r.error ? [] : (r.data || []); };
 
-  const nav = () => `<div class="cp-chips">${[['summary', 'Collection'], ...(mode !== 'figures' ? [['tx', 'Transactions']] : []), ...(pdf ? [['reports', 'Reports (PDF)']] : [])]
+  const loadReq = async () => { if (mode !== 'record') return; const r = await supabase.rpc('fin_requests_overview'); if (r.error) { flash = note(r.error.message + ' (Run the fin_requests_overview SQL in Supabase if you have not yet.)', 'er'); reqs = []; } else reqs = r.data || []; };
+
+  const nav = () => `<div class="cp-chips">${[['summary', 'Collection'], ...(mode !== 'figures' ? [['tx', 'Transactions']] : []), ...(mode === 'record' ? [['req', 'Requests']] : []), ...(pdf ? [['reports', 'Reports (PDF)']] : [])]
     .map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
   const paint = body => { el.innerHTML = `${mode === 'figures' ? '<p class="muted">Collection figures for transparency. Individual records are not shown to this account.</p>' : ''}${nav()}${flash}${body}`; flash = '';
     el.querySelectorAll('.cp-chips button').forEach(b => { b.onclick = () => go(b.dataset.t); }); };
-  const go = async t => { tab = t; el.innerHTML = '<p class="muted">Loading…</p>'; if (t === 'summary') await loadSummary(); if (t === 'tx') await loadTx(); if (t === 'reports') await loadSummary(); draw(); };
+  const go = async t => { tab = t; el.innerHTML = '<p class="muted">Loading…</p>'; if (t === 'summary') await loadSummary(); if (t === 'tx') await loadTx(); if (t === 'req') await loadReq(); if (t === 'reports') await loadSummary(); draw(); };
 
   /* ---------------- collection figures */
   const kpi = (l, o) => `<div class="fn-k"><small>${l}</small><b>${money(o?.total)}</b><span>${o?.n || 0} receipt${(o?.n || 0) === 1 ? '' : 's'}</span></div>`;
@@ -83,6 +85,22 @@ export async function mountFinance(el, me) {
         <label>OFFICIAL RECEIPT NO. (OPTIONAL, AUTO-NUMBERED IF EMPTY)</label><input id="fm-or" value="${esc(d.or)}" placeholder="e.g. 0012345">
         <label>REMARKS (OPTIONAL)</label><input id="fm-rm" value="${esc(d.remarks)}"></div>
       <button class="cp-g" id="fm-go">Save Payment Record</button>`;
+  };
+
+  /* ---------------- requested documents (read-only, for transparency) */
+  const STL = { for_review: 'FOR REVIEW', ready: 'READY FOR CLAIM', released: 'RELEASED', rejected: 'REJECTED' };
+  const reqView = () => {
+    const owed = r => Number(r.fee) > 0 && !r.paid && r.status !== 'rejected';
+    const by = {};
+    reqs.forEach(r => { const k = r.service || 'Other'; const v = by[k] = by[k] || { n: 0, paid: 0, unpaid: 0 }; v.n++; if (r.paid) v.paid++; else if (owed(r)) v.unpaid++; });
+    const tot = Object.values(by).reduce((a, v) => ({ n: a.n + v.n, paid: a.paid + v.paid, unpaid: a.unpaid + v.unpaid }), { n: 0, paid: 0, unpaid: 0 });
+    const list = reqs.filter(r => rf === 'all' || (rf === 'paid' && r.paid) || (rf === 'unpaid' && owed(r)));
+    return `${note('Read-only list of the documents requested by residents, shown for transparency. Record payments under Transactions.')}
+      <div class="an-card"><b>Documents requested</b>${tbl(['Document', 'Requested', 'Paid', 'Unpaid'], Object.entries(by).map(([k, v]) => [esc(k), v.n, v.paid, v.unpaid]), ['Total', tot.n, tot.paid, tot.unpaid])}</div>
+      <div class="fn-sel"><select id="rq-f">${opts([['all', 'All requests'], ['paid', 'Paid only'], ['unpaid', 'Waiting for payment']], rf)}</select></div>
+      ${list.map(r => `<div class="cp-card" style="cursor:default"><div class="cp-top"><b style="color:#111">${esc(r.service)}</b><span class="cp-chip ${r.paid ? 'rc' : owed(r) ? 'fr' : 'rl'}">${r.paid ? 'PAID' : owed(r) ? 'UNPAID' : (Number(r.fee) > 0 ? esc(STL[r.status] || '') : 'NO FEE')}</span></div>
+        <small class="muted">${esc(r.ref)} · ${nice(r.created_at)}</small><p style="margin:6px 0 0">${esc(r.resident_name || '-')}</p>
+        <div class="cp-foot"><span>${Number(r.fee) > 0 ? money(r.fee) : 'No fee'} · ${esc(STL[r.status] || r.status)}</span><span>${r.paid ? 'OR ' + esc(r.or_no || '') : ''}</span></div></div>`).join('') || '<p class="muted">No requests found.</p>'}`;
   };
 
   /* ---------------- reports (PDF) */
@@ -139,6 +157,7 @@ export async function mountFinance(el, me) {
         e.preventDefault(); const reason = prompt('Why is this payment record being voided? (at least 5 characters)'); if (!reason) return;
         const { error } = await supabase.rpc('fin_void', { p_id: a.dataset.id, p_reason: reason }); flash = error ? note(error.message, 'er') : note('Payment record voided.'); await loadTx(); draw(); }; });
     }
+    if (tab === 'req') { paint(reqView()); const f = el.querySelector('#rq-f'); if (f) f.onchange = e => { rf = e.target.value; draw(); }; }
     if (tab === 'reports') { paint(reportsView()); bindReports(); }
   };
   const form = (d = {}, err = '') => {
