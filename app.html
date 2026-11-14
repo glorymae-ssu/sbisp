@@ -233,6 +233,10 @@ background:linear-gradient(180deg,#256A13 0%,#2F8F1B 45%,#3FC925 100%);color:#ff
 .ac-box{background:#fff;border:1px solid #E2E6EA;border-radius:12px;overflow:hidden}
 .ac-box .ac-item{border:0;border-bottom:1px solid #EDF0F2;border-radius:0;margin:0;background:#fff;align-items:center}.ac-box .ac-item:last-child{border-bottom:0}.ac-box .ac-item.new{background:#F4FBF3}
 .ac-t{flex:none;width:64px;font-size:12px;font-weight:600;color:#666}
+@media(max-width:600px){
+.ac-box .ac-item{flex-wrap:wrap;align-items:center;gap:6px 10px}.ac-box .ac-item>div{flex:1 1 100%;order:3}.ac-t{width:auto}.ac-box .ac-item .new-pill{margin-left:auto}
+}
+@media(max-width:640px){.ac-box .ac-item{flex-wrap:wrap;gap:6px 10px}.ac-box .ac-item>div{flex:1 1 100%;order:3}.ac-t{width:auto}.ac-box .ac-item .new-pill{order:2;margin-left:auto}}
 </style></head>
 <body>
 <div id="splash"><img src="logo.png" alt="SBISP logo"><h1>SBISP</h1><p class="s1">SMART BARANGAY</p><p class="s2">INFORMATION AND SERVICE PORTAL</p>
