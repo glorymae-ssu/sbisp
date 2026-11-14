@@ -30,7 +30,7 @@ export async function mountActivity(el) {
     const list = rows.filter(x => (f === 'all' || x.kind === f) && (!q || [x.summary, x.actor_name, x.action].join(' ').toLowerCase().includes(q)));
     let html = '', cur = '';
     list.forEach(x => {
-      const k = dayKey(x.happened_at), by = [x.actor_name ? 'By ' + x.actor_name : '', x.action].filter(Boolean).join(' · ');
+      const k = dayKey(x.happened_at), by = [x.actor_name ? 'By ' + x.actor_name : '', x.action && !String(x.summary || '').toLowerCase().includes(String(x.action).toLowerCase()) ? x.action : ''].filter(Boolean).join(' · ');
       if (k !== cur) { if (cur) html += '</div>'; html += `<div class="ac-day">${esc(dayLabel(x.happened_at))}</div><div class="ac-box">`; cur = k; }
       html += `<div class="ac-item ${x.is_new ? 'new' : ''}" title="${esc(when(x.happened_at))}"><span class="ac-t">${esc(clock(x.happened_at))}</span><span class="ac-k k-${esc(x.kind)}">${LABEL[x.kind] || 'ACTIVITY'}</span>
         <div><b>${esc(x.summary)}</b><small>${esc(by)}</small></div>${x.is_new ? '<span class="new-pill">NEW</span>' : ''}</div>`;
