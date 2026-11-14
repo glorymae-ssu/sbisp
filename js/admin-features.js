@@ -42,8 +42,8 @@ export function cols(rows) {
       <small>${esc(r[0])}</small></div>`).join('')}</div>`;
 }
 
-/* ---------- print / save as PDF (preview first, then call this) ---------- */
-export function printHTML(html, title = 'SBISP-Report') {
+/* ---------- print / save as PDF: the raw browser print (used by the preview's Print button) ---------- */
+function rawPrint(html, title = 'SBISP-Report') {
   if (!document.getElementById('sbisp-print-css')) {
     const st = document.createElement('style'); st.id = 'sbisp-print-css';
     st.textContent = `#print-area{display:none}
@@ -56,6 +56,8 @@ export function printHTML(html, title = 'SBISP-Report') {
   a.innerHTML = html;
   const old = document.title; document.title = title; window.print(); document.title = old;
 }
+/* Every report that calls printHTML now opens the on-screen preview first; printing happens from there. */
+export const printHTML = (html, title = 'SBISP-Report') => previewReport(html, title);
 /* ---------- on-screen report preview (view first, then print or download) ---------- */
 export function previewReport(html, title = 'SBISP-Report', onPdf = null) {
   const old = document.getElementById('rp-ov'); if (old) old.remove();
@@ -74,7 +76,7 @@ export function previewReport(html, title = 'SBISP-Report', onPdf = null) {
   const prev = document.body.style.overflow; document.body.style.overflow = 'hidden';
   const close = () => { ov.remove(); document.body.style.overflow = prev; };
   ov.querySelector('#rp-x').onclick = close;
-  ov.querySelector('#rp-pr').onclick = () => printHTML(html, title);
+  ov.querySelector('#rp-pr').onclick = () => rawPrint(html, title);
   if (onPdf) ov.querySelector('#rp-pdf').onclick = () => { onPdf(); };
 }
 export const reportHeader = (title, sub = '') => `
@@ -215,7 +217,7 @@ export async function mountMasterlists(el) {
     const body = table(['#', 'Name', 'Age', 'Sex', 'Address', 'Mobile', 'Notes'],
       data.map((p, i) => [i + 1, p.full_name, p.age, p.sex, `${p.purok ?? ''}, ${p.street ?? ''}`, p.mobile ?? '—', p.notes ?? '']))
       + `<p>Total: <b>${data.length}</b></p>`;
-    out.innerHTML = card(body) + button('🖨️ Print / Save as PDF', 'ml-print');
+    out.innerHTML = card(body) + button('👁 View & Print Masterlist', 'ml-print');
     out.querySelector('#ml-print').onclick = () => printHTML(
       reportHeader('MASTERLIST', type + (purok === 'All Puroks' ? ' · All Puroks' : ' · ' + purok)) + body, 'SBISP-Masterlist-' + type.replace(/\W+/g, '_'));
   };
