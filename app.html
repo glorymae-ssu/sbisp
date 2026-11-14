@@ -35,9 +35,7 @@ a{color:var(--p)}
 #app:has(.staff) .tabs{padding:12px 28px}
 #app:has(.staff) input,#app:has(.staff) select,#app:has(.staff) textarea,#app:has(.staff) .btn{max-width:560px}
 #ac-sum .card{max-width:480px}
-#ac-list{display:grid;grid-template-columns:repeat(2,1fr);gap:0 14px;align-items:start}
 }
-@media(min-width:1000px){#ac-list{grid-template-columns:repeat(3,1fr)}}
 
 /* Opening page (shown once per visit, then fades into the login screen) */
 #splash{position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 24px 8vh;
@@ -226,6 +224,11 @@ background:linear-gradient(180deg,#256A13 0%,#2F8F1B 45%,#3FC925 100%);color:#ff
 .fn-k small{display:block;font-size:10px;font-weight:700;letter-spacing:.4px;color:#555}.fn-k b{display:block;font-size:15px;color:#1B6B1B;margin:4px 0 2px;word-break:break-word}.fn-k span{font-size:11px;color:#666}
 .fn-tot td{font-weight:800;background:#E7F5E4;border-top:2px solid #BFE3B7}.cp-card.voided{opacity:.62;border-style:dashed}
 .an-card .ml-wrap{margin-top:8px;border-radius:10px}.an-card .ml-t{min-width:0}
+
+/* Profile buttons: centered and balanced on every account */
+.btn.bl,.btn.gy,.btn.rd{display:block;margin-left:auto;margin-right:auto;max-width:560px}
+.pf-card .pf-av{overflow:hidden}.pf-av img,.av img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}.av{overflow:hidden}
+.pf-ph{display:inline-block;margin:4px 9px 0;font-size:13px;font-weight:700;color:#1565C0;cursor:pointer;text-decoration:none}.pf-ph.pf-rm{color:#C62828}
 </style></head>
 <body>
 <div id="splash"><img src="logo.png" alt="SBISP logo"><h1>SBISP</h1><p class="s1">SMART BARANGAY</p><p class="s2">INFORMATION AND SERVICE PORTAL</p>
