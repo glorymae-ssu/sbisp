@@ -420,7 +420,7 @@ const ICO = {
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-7 8-7s8 2.8 8 7"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>', out: '<path d="M10 4H5v16h5M15 8l4 4-4 4M9 12h10"/>' };
 const ico = (n, c = 'currentColor', z = 22) => `<svg width="${z}" height="${z}" viewBox="0 0 24 24" fill="none" stroke="${c}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICO[n]}</svg>`;
 const initials = n => (String(n || '').trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('') || 'U').toUpperCase();
-const hdr = (name, title, sub, right = '', extra = '') => `<div class="hdr"><div class="hdr-row"><div class="av">${esc(initials(name))}</div>
+const hdr = (name, title, sub, right = '', extra = '') => `<div class="hdr"><div class="hdr-row"><div class="av">${me?.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="">` : esc(initials(name))}</div>
   <div class="hdr-t"><b>${title}</b><span>${sub}</span></div>${right}</div>${extra}</div>`;
 const tile = (k, label, icon, color) => `<button class="qa-t" data-k="${esc(k)}"><span class="qa-i">${ico(icon, color)}</span><span class="qa-l" style="color:${color}">${esc(label)}</span></button>`;
 const CL_NAVY = '#0B2A8A', CL_GREEN = '#1F7A14', CL_ORANGE = '#E8782A';
@@ -512,8 +512,8 @@ function profileView(el) {
        ${me ? f('VOTER STATUS', voterLine(me)) : ''}${me ? f2('PRECINCT NUMBER (OPTIONAL)', me.precinct_no) : ''}${f('VALID ID', idn)}${me ? f('CATEGORY', catLine(me)) : ''}`
     : `${f2('FULL NAME', nm)}${f('USERNAME', uname)}${f2('CONTACT NUMBER', fmtPh(me?.mobile))}${f2('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${f2('ROLE', roleLabel(me))}`;
   const canEdit = me && (me.role !== 'resident' || me.status === 'verified');
-  el.innerHTML = `<div class="pf-card"><div class="pf-av">${esc(initials(nm))}</div><div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
-    <div id="pf-pu"></div><div class="pf-fields">${fields}</div>
+  el.innerHTML = `<div class="pf-card"><div class="pf-av">${me?.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="">` : esc(initials(nm))}</div>${me ? `<label class="pf-ph" for="pf-file">${me.avatar_url ? 'Change photo' : 'Add photo'}</label><input type="file" id="pf-file" accept="image/*" hidden>${me.avatar_url ? '<a href="#" class="pf-ph pf-rm" id="pf-rm">Remove</a>' : ''}` : ''}<div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
+    <div id="pf-pm"></div><div id="pf-pu"></div><div class="pf-fields">${fields}</div>
     <div id="pf-m"></div>${isRes ? `<button class="btn bl" id="pf-reg">${regDone() ? 'Edit Registration Details' : 'Complete Resident Registration'}</button>` : '<button class="btn bl" id="pf-reg">Edit Profile</button>'}
     <button class="btn gy" id="pf-pw">Change Password</button><button class="btn rd" id="pf-lo">Logout Account</button>
     <p class="org-link"><a href="#" id="pf-org">View Barangay Organizational Structure</a></p>`;
@@ -534,7 +534,40 @@ function profileView(el) {
   };
   $('pf-pw').onclick = () => pwView(el);
   $('pf-lo').onclick = logout;
+  if ($('pf-file')) $('pf-file').onchange = e => { const f = e.target.files && e.target.files[0]; if (f) savePhoto(f, el); };
+  if ($('pf-rm')) $('pf-rm').onclick = e => { e.preventDefault(); savePhoto(null, el); };
   $('pf-org').onclick = e => { e.preventDefault(); orgPage(boot); };
+}
+/* Profile photo: every account can change it without approval; the change is logged for the Activity Monitor */
+const shrinkPhoto = (file, size = 480) => new Promise((ok, no) => {
+  const url = URL.createObjectURL(file), img = new Image();
+  img.onload = () => {
+    const s = Math.min(img.width, img.height), c = document.createElement('canvas'); c.width = c.height = size;
+    c.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, size, size);
+    URL.revokeObjectURL(url); c.toBlob(b => (b ? ok(b) : no(new Error('The photo could not be read.'))), 'image/jpeg', 0.85);
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); no(new Error('Please choose a JPG or PNG photo.')); };
+  img.src = url;
+});
+async function savePhoto(file, el) {
+  const out = t => { if ($('pf-pm')) $('pf-pm').innerHTML = t; };
+  try {
+    let url = null, path = null;
+    if (file) {
+      out(msg('Saving your photo…'));
+      const blob = await shrinkPhoto(file);
+      path = `${acct.id}/photo-${Date.now()}.jpg`;
+      const up = await supabase.storage.from('avatars').upload(path, blob, { contentType: 'image/jpeg' });
+      if (up.error) throw up.error;
+      url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+    }
+    const { data: old, error } = await supabase.rpc('set_my_avatar', { p_url: url, p_path: path });
+    if (error) { if (path) supabase.storage.from('avatars').remove([path]); throw error; }
+    if (old) supabase.storage.from('avatars').remove([old]);
+    me.avatar_url = url; me.avatar_path = path;
+    profileView(el);
+    out(msg(url ? 'Your profile photo was updated.' : 'Your profile photo was removed.'));
+  } catch (e) { out(msg(esc(e.message || 'The photo could not be saved.'), 'er')); }
 }
 let pendingUpdate = null;
 async function submitEdit() {
