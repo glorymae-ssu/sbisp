@@ -45,7 +45,7 @@ export async function mountDashboard(el, me, mountPopulation) {
   if (r.error) { el.innerHTML = `<div class="msg er">${esc(r.error.message)}</div>`; return; }
   const all = r.data || []; let months = 6, snap = null;
   el.innerHTML = `<div class="an-range"><span>DATE RANGE</span><select id="an-r"><option value="3">Last 3 Months</option><option value="6" selected>Last 6 Months</option><option value="12">Last 12 Months</option></select></div>
-    <div id="an-main"></div>${canPdf(me) ? '<button class="cp-g" id="an-pdf">Generate PDF Report</button>' : ''}${mountPopulation ? '<div class="qa-h"><span>Population</span></div><div id="an-pop"></div>' : ''}`;
+    <div id="an-main"></div>${canPdf(me) ? '<button class="cp-g" id="an-pdf">View &amp; Print Report</button>' : ''}${mountPopulation ? '<div class="qa-h"><span>Population</span></div><div id="an-pop"></div>' : ''}`;
   const draw = () => {
     const now = new Date(), start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
     const rows = all.filter(x => new Date(x.created_at) >= start), total = rows.length, by = s => rows.filter(x => x.status === s).length;

@@ -6,7 +6,7 @@
 // If the PDF library cannot be loaded (for example no internet), the report opens in the print window
 // so it can still be saved as a PDF from there.
 // =====================================================================
-import { esc, reportHeader, table, printHTML } from './admin-features.js';
+import { esc, reportHeader, table, printHTML, previewReport } from './admin-features.js';
 
 export const canPdf = me => !!me && !me.is_pb && ['employee', 'treasurer'].includes(me.role);
 export const roleName = me => ({ employee: 'Barangay Secretary', treasurer: 'Barangay Treasurer', admin: 'Administrator' }[me?.role] || 'Staff');
@@ -39,7 +39,27 @@ async function logo() {
  *               landscape, filename, me })
  * Returns true when a PDF file was created, false when the print window was used instead.
  */
+const cell = (c, a) => `<td style="text-align:${a || 'left'}">${esc(c)}</td>`;
+function reportHtml(o) {
+  const { title, subtitle = '', summary = [], sections = [], me } = o;
+  const stamp = new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' });
+  return reportHeader(title, subtitle) + `<p style="text-align:center;font-style:italic;font-size:12px;margin:0 0 8px">Generated ${esc(stamp)}</p>`
+    + (summary.length ? `<table style="margin:8px 0;border:0">${summary.map(([a, b]) => `<tr><td style="border:0;padding:2px 12px 2px 0"><b>${esc(a)}</b></td><td style="border:0">${esc(b)}</td></tr>`).join('')}</table>` : '')
+    + sections.map(s => { const al = s.align || [];
+      return (s.heading ? `<h3 style="margin:14px 0 4px">${esc(s.heading)}</h3>` : '')
+        + `<table><tr>${s.columns.map((h, i) => `<th style="text-align:${al[i] || 'left'}">${esc(h)}</th>`).join('')}</tr>`
+        + (s.rows.length ? s.rows : [['None']]).map(r => `<tr>${r.map((c, i) => cell(c, al[i])).join('')}</tr>`).join('')
+        + (s.foot ? `<tr style="font-weight:bold;background:#E7F5E4">${s.foot.map((c, i) => cell(c, al[i])).join('')}</tr>` : '') + '</table>'; }).join('')
+    + `<div style="margin-top:36px;display:flex;justify-content:space-between"><span>Prepared by:<br><br><b>${esc((me?.full_name || '').toUpperCase())}</b><br>${esc(roleName(me))}</span><span>Noted by:<br><br><b>PUNONG BARANGAY</b></span></div>`;
+}
+
+/** Shows the report on screen first. The person can then Print it or Download it as a PDF. */
 export async function generatePdf(o) {
+  previewReport(reportHtml(o), o.filename || 'SBISP-Report', () => buildPdf(o));
+  return true;
+}
+
+async function buildPdf(o) {
   const { title, subtitle = '', summary = [], sections = [], landscape = false, filename = 'SBISP-Report', me } = o;
   const stamp = new Date().toLocaleString('en-PH', { dateStyle: 'long', timeStyle: 'short' });
   try {

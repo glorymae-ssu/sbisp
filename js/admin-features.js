@@ -56,6 +56,27 @@ export function printHTML(html, title = 'SBISP-Report') {
   a.innerHTML = html;
   const old = document.title; document.title = title; window.print(); document.title = old;
 }
+/* ---------- on-screen report preview (view first, then print or download) ---------- */
+export function previewReport(html, title = 'SBISP-Report', onPdf = null) {
+  const old = document.getElementById('rp-ov'); if (old) old.remove();
+  if (!document.getElementById('rp-css')) {
+    const st = document.createElement('style'); st.id = 'rp-css';
+    st.textContent = `#rp-ov table{width:100%;border-collapse:collapse;margin:4px 0 12px;font-size:13px}#rp-ov td,#rp-ov th{border:1px solid #bbb;padding:4px 7px;text-align:left}#rp-ov th{background:#E4F5EA}
+      #rp-ov .rp-b{border:0;border-radius:99px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer;background:#fff;color:#1F7A14;font-family:inherit}`;
+    document.head.appendChild(st);
+  }
+  const ov = document.createElement('div'); ov.id = 'rp-ov';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:200;background:#E9F4E6;overflow:auto;-webkit-overflow-scrolling:touch';
+  ov.innerHTML = `<div style="position:sticky;top:0;z-index:1;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:#1F7A14;color:#fff">
+      <b style="flex:1;min-width:120px">Report preview</b>${onPdf ? '<button class="rp-b" id="rp-pdf">Download PDF</button>' : ''}<button class="rp-b" id="rp-pr">Print</button><button class="rp-b" id="rp-x">Close</button></div>
+    <div style="max-width:820px;margin:14px auto;background:#fff;padding:22px;box-shadow:0 2px 10px #0002;font-family:'Times New Roman',serif;font-size:14px;overflow-x:auto">${html}</div>`;
+  document.body.appendChild(ov);
+  const prev = document.body.style.overflow; document.body.style.overflow = 'hidden';
+  const close = () => { ov.remove(); document.body.style.overflow = prev; };
+  ov.querySelector('#rp-x').onclick = close;
+  ov.querySelector('#rp-pr').onclick = () => printHTML(html, title);
+  if (onPdf) ov.querySelector('#rp-pdf').onclick = () => { onPdf(); };
+}
 export const reportHeader = (title, sub = '') => `
   <div style="display:flex;align-items:center;border-bottom:2px solid #0B5D33;padding-bottom:8px;text-align:center">
     <img src="${esc(BARANGAY.logo)}" alt="" style="width:60px;height:60px;border-radius:50%">
@@ -66,7 +87,7 @@ export const table = (head, rows) =>
   `<table><tr>${head.map(h => `<th>${esc(h)}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${esc(c)}</td>`).join('')}</tr>`).join('') || `<tr><td colspan="${head.length}">None</td></tr>`}</table>`;
 
 /* =====================================================================
-   1. ANALYTICS (bar graphs)   -> admin / Punong Barangay only
+   1. ANALYTICS (bar graphs)   -> admin / Punong Barangay / Barangay Secretary
    ===================================================================== */
 export async function mountAnalytics(el) {
   el.innerHTML = '<p>Loading analytics…</p>';
@@ -79,7 +100,7 @@ export async function mountAnalytics(el) {
   const grid = items => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">${items.join('')}</div>`;
   const G = '#0F6B3A', R = '#D32F2F';
 
-  el.innerHTML = box('in', '🔒 Confidential: visible only to the Administrator and the Punong Barangay.')
+  el.innerHTML = box('in', '🔒 Confidential: visible only to the Administrator, the Punong Barangay and the Barangay Secretary.')
     + (d.stale_cases ? box('wa', `⏰ ${d.stale_cases} case${d.stale_cases > 1 ? 's have' : ' has'} been pending for more than 7 days.`) : '')
     + grid([big('Total Population', d.population), big('Registered Voters', d.registered_voters), big('Senior Citizens', d.seniors), big('New Residents', d.new_residents)])
     + grid([big('VAWC Cases', d.vawc, R, `border-top:4px solid ${R}`), big('Juvenile Cases', d.juvenile, R, `border-top:4px solid ${R}`),
@@ -99,11 +120,11 @@ export async function mountAnalytics(el) {
     + card('<b>Complaints Filed per Month</b>' + cols(months(d.complaints_per_month)))
     + card('<b>Certificates Processed by Service</b>' + bars(rows(d.certificates_by_service)))
     + card('<b>Collections per Month (₱)</b>' + cols(months(d.collections_per_month)))
-    + button('📄 Print / Save Summary as PDF', 'ana-print');
+    + button('👁 View & Print Summary Report', 'ana-print');
 
   el.querySelector('#ana-print').onclick = () => {
     const t = (h, a) => `<h4>${esc(h)}</h4>` + table(['Category', 'Count'], rows(a));
-    printHTML(reportHeader('BARANGAY ANALYTICS SUMMARY', new Date().toLocaleDateString('en-PH', { dateStyle: 'long' }))
+    previewReport(reportHeader('BARANGAY ANALYTICS SUMMARY', new Date().toLocaleDateString('en-PH', { dateStyle: 'long' }))
       + `<h4>Overview</h4>` + table(['Item', 'Count'], [['Total living population', d.population], ['Registered voters', d.registered_voters], ['Senior citizens', d.seniors],
           ['New residents', d.new_residents], ['Youth (15–30)', d.youth], ['PWD', d.pwd], ['Social Pensioners (LGU)', d.social_pensioners_lgu], ['SSS Pensioners', d.sss_pensioners],
           ['VAWC cases', d.vawc], ['Juvenile cases', d.juvenile], ['Peace and Order cases', d.peace_order], ['Total cases', d.total_cases]])

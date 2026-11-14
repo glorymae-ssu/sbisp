@@ -86,12 +86,12 @@ export async function mountFinance(el, me) {
   };
 
   /* ---------------- reports (PDF) */
-  const reportsView = () => `<p class="muted">Generate a PDF with the barangay header, totals and signature lines, ready to submit.</p>
-    <div class="an-card"><b>Daily Collection Report</b><div class="cp-r"><span>DATE</span><input type="date" id="rp-d" value="${ymd(today)}" max="${ymd(today)}" style="max-width:55%"></div><button class="cp-g" data-r="daily">Generate PDF</button></div>
-    <div class="an-card"><b>Monthly Collection Report</b><div class="cp-r"><span>MONTH</span><span style="display:flex;gap:6px;max-width:70%"><select id="rp-m">${opts(MON.map((n, i) => [i + 1, n]), month)}</select><select id="rp-my">${opts(yearsList(), year)}</select></span></div><button class="cp-g" data-r="monthly">Generate PDF</button></div>
-    <div class="an-card"><b>Yearly Collection Report</b><div class="cp-r"><span>YEAR</span><select id="rp-y" style="max-width:40%">${opts(yearsList(), year)}</select></div><button class="cp-g" data-r="yearly">Generate PDF</button></div>
+  const reportsView = () => `<p class="muted">View the report on screen first, then print it or download it as a PDF.</p>
+    <div class="an-card"><b>Daily Collection Report</b><div class="cp-r"><span>DATE</span><input type="date" id="rp-d" value="${ymd(today)}" max="${ymd(today)}" style="max-width:55%"></div><button class="cp-g" data-r="daily">View &amp; Print</button></div>
+    <div class="an-card"><b>Monthly Collection Report</b><div class="cp-r"><span>MONTH</span><span style="display:flex;gap:6px;max-width:70%"><select id="rp-m">${opts(MON.map((n, i) => [i + 1, n]), month)}</select><select id="rp-my">${opts(yearsList(), year)}</select></span></div><button class="cp-g" data-r="monthly">View &amp; Print</button></div>
+    <div class="an-card"><b>Yearly Collection Report</b><div class="cp-r"><span>YEAR</span><select id="rp-y" style="max-width:40%">${opts(yearsList(), year)}</select></div><button class="cp-g" data-r="yearly">View &amp; Print</button></div>
     <div class="an-card"><b>Collection Register (all receipts)</b><div class="cp-r"><span>FROM</span><input type="date" id="rp-f" value="${from}" style="max-width:48%"></div><div class="cp-r"><span>TO</span><input type="date" id="rp-t" value="${to}" style="max-width:48%"></div>
-      <button class="cp-g" data-r="register">Generate PDF</button></div>`;
+      <button class="cp-g" data-r="register">View &amp; Print</button></div>`;
 
   const run = async kind => {
     const g = s => el.querySelector(s); let ok;
@@ -120,7 +120,7 @@ export async function mountFinance(el, me) {
         sections: [{ columns: ['Date', 'OR No.', 'Payer', 'Payment for', 'Method', 'Amount', 'Status', 'Recorded by'], rows: all.map(x => [nice(x.paid_on), x.or_no, x.payer_name, x.service, x.method, pesos(x.amount), x.status === 'voided' ? 'VOID' : 'Recorded', x.recorded_by_name || '']),
           foot: ['', '', '', '', 'TOTAL', pesos(total), '', ''], align: ['left', 'left', 'left', 'left', 'left', 'right', 'left', 'left'] }] });
     }
-    flash = note(ok ? 'PDF generated.' : 'The PDF library could not be loaded, so the report opened in the print window. Choose "Save as PDF" there.');
+    flash = '';
     paint(reportsView());
     bindReports();
   };
