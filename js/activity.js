@@ -8,6 +8,10 @@ import { esc } from './admin-features.js';
 
 const KINDS = [['all', 'All'], ['account', 'Accounts'], ['registration', 'Registrations'], ['update', 'Updates'], ['delete', 'Deletions'], ['complaint', 'Complaints'], ['service', 'Requests']];
 const LABEL = { account: 'ACCOUNT', registration: 'REGISTRATION', update: 'UPDATE', delete: 'DELETED', complaint: 'COMPLAINT', service: 'REQUEST', other: 'ACTIVITY' };
+const dayKey = d => { const x = new Date(d); return x.getFullYear() + '-' + (x.getMonth() + 1) + '-' + x.getDate(); };
+const dayLabel = d => { const x = new Date(d), full = x.toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  return dayKey(x) === dayKey(new Date()) ? 'Today · ' + full : dayKey(x) === dayKey(new Date(Date.now() - 864e5)) ? 'Yesterday · ' + full : full; };
+const clock = d => new Date(d).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' });
 const when = d => new Date(d).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 export async function mountActivity(el) {
@@ -24,8 +28,15 @@ export async function mountActivity(el) {
     const count = k => rows.filter(x => k === 'all' || x.kind === k).length;
     $('#ac-chips').innerHTML = KINDS.map(([k, l]) => `<button data-f="${k}" class="${f === k ? 'on' : ''}">${l} (${count(k)})</button>`).join('');
     const list = rows.filter(x => (f === 'all' || x.kind === f) && (!q || [x.summary, x.actor_name, x.action].join(' ').toLowerCase().includes(q)));
-    $('#ac-list').innerHTML = list.map(x => `<div class="ac-item ${x.is_new ? 'new' : ''}"><span class="ac-k k-${esc(x.kind)}">${LABEL[x.kind] || 'ACTIVITY'}</span>
-      <div><b>${esc(x.summary)}</b><small>${esc(when(x.happened_at))}</small></div>${x.is_new ? '<span class="new-pill">NEW</span>' : ''}</div>`).join('') || '<p class="muted">Nothing here yet.</p>';
+    let html = '', cur = '';
+    list.forEach(x => {
+      const k = dayKey(x.happened_at), by = [x.actor_name ? 'By ' + x.actor_name : '', x.action].filter(Boolean).join(' · ');
+      if (k !== cur) { if (cur) html += '</div>'; html += `<div class="ac-day">${esc(dayLabel(x.happened_at))}</div><div class="ac-box">`; cur = k; }
+      html += `<div class="ac-item ${x.is_new ? 'new' : ''}" title="${esc(when(x.happened_at))}"><span class="ac-t">${esc(clock(x.happened_at))}</span><span class="ac-k k-${esc(x.kind)}">${LABEL[x.kind] || 'ACTIVITY'}</span>
+        <div><b>${esc(x.summary)}</b><small>${esc(by)}</small></div>${x.is_new ? '<span class="new-pill">NEW</span>' : ''}</div>`;
+    });
+    if (cur) html += '</div>';
+    $('#ac-list').innerHTML = (list.length ? `<p class="muted" style="margin:8px 2px 0">${list.length} ${list.length === 1 ? 'activity' : 'activities'}, newest first</p>` : '') + (html || '<p class="muted">Nothing here yet.</p>');
   };
   $('#ac-q').oninput = e => { q = e.target.value.trim().toLowerCase(); draw(); };
   $('#ac-chips').onclick = e => { const b = e.target.closest('button[data-f]'); if (b) { f = b.dataset.f; draw(); } };
