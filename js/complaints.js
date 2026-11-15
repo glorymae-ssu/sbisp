@@ -36,6 +36,13 @@ export async function mountComplaints(el, me) {
   };
   await load();
   if (mode !== 'officer') officers = (await supabase.rpc('complaint_officers')).data || [];
+  const photos = { id: {}, name: {} };                     // filer photos, so staff can see who really filed the complaint
+  try {
+    const pr = await supabase.from('profiles').select('id, full_name, avatar_url').eq('role', 'resident').limit(2000), cnt = {};
+    (pr.data || []).forEach(x => { cnt[x.full_name] = (cnt[x.full_name] || 0) + 1; if (x.avatar_url) photos.id[x.id] = x.avatar_url; });
+    (pr.data || []).forEach(x => { if (x.avatar_url && cnt[x.full_name] === 1) photos.name[x.full_name] = x.avatar_url; });
+  } catch (e) { /* photos are optional */ }
+  const photoOf = r => photos.id[r.user_id || r.filer_id || r.resident_id || r.created_by] || photos.name[r.filer_name];
   const puroks = [...new Set(rows.map(r => r.purok).filter(Boolean))].sort();
   const assigneeOpts = (cur) => group(officers, cur);
 
@@ -46,6 +53,7 @@ export async function mountComplaints(el, me) {
   if (mode === 'officer') $('#cp-flash').insertAdjacentHTML('beforebegin', '<p class="muted">Complaints assigned to you.</p>');
 
   const card = r => {
+    const ph = photoOf(r);
     const o = open === r.id, can = mode === 'manage' || (mode === 'officer' && r.assigned_to === me.id);
     const done = r.status === 'resolved';           // a resolved complaint is final: no more status changes or officer assignment
     const panelOpen = `<div class="cp-pn">
@@ -65,7 +73,7 @@ export async function mountComplaints(el, me) {
     return `<div class="cp-card ${o ? 'open' : ''}" data-id="${r.id}"><div class="cp-top" data-t="1"><b>${esc(r.title)}</b>${chip(r.status)}</div>
       <p data-t="1">${esc(r.description)}</p>
       ${r.assigned_name ? `<small class="cp-as">Assigned to ${esc(asLine(r))}</small>` : r.status !== 'resolved' ? '<small class="cp-un">UNASSIGNED</small>' : ''}
-      ${o ? panel : ''}<div class="cp-foot" data-t="1"><span>Filer: ${esc(r.filer_name || '—')} • ${day(r.created_at)}</span><span class="cp-chev">${o ? '⌃' : '⌄'}</span></div></div>`;
+      ${o && ph ? `<div class="cp-fp"><img class="cp-ph big" src="${esc(ph)}" alt=""><div><b>${esc(r.filer_name || '')}</b><small class="muted">Photo from the resident's registration</small></div></div>` : ''}${o ? panel : ''}<div class="cp-foot" data-t="1"><span>${ph ? `<img class="cp-ph" src="${esc(ph)}" alt="">` : ''}Filer: ${esc(r.filer_name || '—')} • ${day(r.created_at)}</span><span class="cp-chev">${o ? '⌃' : '⌄'}</span></div></div>`;
   };
   const draw = () => {
     const count = s => rows.filter(r => s === 'all' || r.status === s).length;

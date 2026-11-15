@@ -16,6 +16,7 @@ const codeOf = p => p.classification
   || (p.residency_type === 'Transferred from Another Barangay' ? 'another_barangay' : p.residency_type === 'Informal Settler' ? 'informal'
     : p.residency_type === 'Temporary/Transient Resident' ? 'transient' : p.residency_type === 'Non-Resident/Visitor' ? 'visitor' : p.residency_type === 'Other' ? 'other'
       : p.voter_status === 'Registered Voter' ? 'resident_voter' : 'resident_nonvoter');
+const av = r => `<span class="cl-av">${r.avatar_url ? `<img src="${esc(r.avatar_url)}" alt="">` : esc(initials(r.full_name))}</span>`;
 const note = (t, k = '') => `<div class="msg ${k}">${esc(t)}</div>`;
 
 export async function mountClassification(el, me) {
@@ -23,7 +24,7 @@ export async function mountClassification(el, me) {
   let rows = [], q = '', flash = '';
   el.innerHTML = '<p class="muted">Loading…</p>';
   const load = async () => {
-    const r = await supabase.from('profiles').select('id, full_name, purok, street, status, reference_no, residency_type, voter_status, classification, classification_notes, previous_barangay, previous_city, previous_street, residing_since, length_of_stay, current_area')
+    const r = await supabase.from('profiles').select('id, full_name, avatar_url, purok, street, status, reference_no, residency_type, voter_status, classification, classification_notes, previous_barangay, previous_city, previous_street, residing_since, length_of_stay, current_area')
       .eq('role', 'resident').in('status', ['pending', 'verified', 'correction']).order('full_name').limit(500);
     if (r.error) { flash = note(r.error.message + ' (Run sbisp-dashboard.sql in Supabase if you have not yet.)', 'er'); rows = []; } else rows = r.data || [];
   };
@@ -36,7 +37,7 @@ export async function mountClassification(el, me) {
         <input id="cl-q" placeholder="Search resident name or purok…" value="${esc(q)}" autocomplete="off"></div></div><div id="cl-list"></div>`;
     const draw = () => {
       const l = rows.filter(r => !q || [r.full_name, r.purok, r.reference_no].join(' ').toLowerCase().includes(q));
-      el.querySelector('#cl-list').innerHTML = l.map(r => `<div class="cl-row" data-id="${r.id}"><span class="cl-av">${esc(initials(r.full_name))}</span>
+      el.querySelector('#cl-list').innerHTML = l.map(r => `<div class="cl-row" data-id="${r.id}">${av(r)}
         <div><b>${esc(r.full_name)}</b><small>${esc(r.reference_no || '')} • ${esc(r.purok || '—')}</small></div><span class="cp-chip as">${esc(SHORT[codeOf(r)])}</span></div>`).join('') || '<p class="muted">No residents found.</p>';
       el.querySelectorAll('.cl-row').forEach(c => { c.onclick = () => form(rows.find(r => r.id === c.dataset.id)); });
     };
@@ -60,7 +61,7 @@ export async function mountClassification(el, me) {
       v('#f-pb', 'previous_barangay'); v('#f-pc', 'previous_city'); v('#f-ps', 'previous_street'); v('#f-sd', 'residing_since'); v('#f-ls', 'length_of_stay'); v('#f-ca', 'current_area'); v('#f-nt', 'notes');
     };
     el.innerHTML = `<a href="#" id="cl-bk">‹ Back to residents</a><div class="cl-auth"><b>AUTHORIZED PERSONNEL ONLY</b><small>${can ? 'Staff Admin' : 'View only'}</small></div>${err ? note(err, 'er') : ''}
-      <div class="cl-res"><span class="cl-av">${esc(initials(r.full_name))}</span><div><b>${esc(r.full_name)}</b><small>${esc(r.reference_no || '')} • ${esc(r.purok || '—')}</small></div></div>
+      <div class="cl-res">${av(r)}<div><b>${esc(r.full_name)}</b><small>${esc(r.reference_no || '')} • ${esc(r.purok || '—')}</small></div></div>
       <div class="cl-card"><div class="cl-t">RESIDENCY CLASSIFICATION</div>
         ${OPTS.map(([k, l]) => `<label class="cl-opt ${d.code === k ? 'on' : ''}"><input type="radio" name="cl" value="${k}" ${d.code === k ? 'checked' : ''} ${can ? '' : 'disabled'}><span>${esc(l)}</span></label>`).join('')}
         <div id="cl-dyn">${dyn()}</div></div>

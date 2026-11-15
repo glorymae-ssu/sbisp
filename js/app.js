@@ -290,7 +290,7 @@ function bindDetails(cur, getA) {                                 // keeps `cur`
   return { sync, redraw };
 }
 
-let rg = {}, idFile = null;
+let rg = {}, idFile = null, photoFile = null;
 function rgInit() {
   const p = me || {}, u = (acct && acct.user_metadata) || {}, em = (acct && acct.email) || '';
   const real = em && !em.endsWith('@sbisp-guinsorongan.app') ? em : '';
@@ -298,7 +298,7 @@ function rgInit() {
     mobile: (p.mobile || u.mobile || '').replace(/^0/, ''), mobileLocked: !!u.mobile, email: p.contact_email || real, emailLocked: !!real,
     street: p.street || '', purok: p.purok || '', prev_street: p.previous_street || '', prev_barangay: p.previous_barangay || '', prev_city: p.previous_city || '',
     since: p.residing_since || '', voter: voterChoice(p), precinct: p.precinct_no || '', username: u.username || '', edit: false, cur: fromProfile(p), id_type: p.valid_id_type || IDS[0], id_number: p.id_number || '', id_path: p.id_file_path || '', consent: false };
-  idFile = null;
+  idFile = null; photoFile = null;
 }
 const regStart = () => { rgInit(); rg1(); };
 const lab = (id, t, hint) => `<label for="${id}">${t}${hint ? ` <em>(${hint})</em>` : ''}</label>`;
@@ -368,12 +368,20 @@ function rg3(err = '') {
     ${sel2('g-it', 'VALID ID', IDS, rg.id_type)}${lab('g-in', 'ID NUMBER')}<input id="g-in" value="${esc(rg.id_number)}">
     ${lab('g-fl', 'UPLOAD ID/SUPPORTING DOCUMENT')}<div class="rg-drop" id="g-drop"><div style="font-size:26px">📄</div><div id="g-fn">${idFile ? esc(idFile.name) : rg.id_path ? 'ID already uploaded. Tap to replace it.' : 'Choose a clear photo (JPEG or PNG) or PDF, up to 5 MB'}</div></div>
     <input id="g-file" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf" hidden>
+    ${lab('p-fl', 'YOUR PHOTO (FACE CLEARLY VISIBLE, NO FILTERS)')}<div class="rg-drop" id="p-drop">${photoFile ? `<img src="${URL.createObjectURL(photoFile)}" alt="" style="width:84px;height:84px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 6px">` : me?.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="" style="width:84px;height:84px;border-radius:50%;object-fit:cover;display:block;margin:0 auto 6px">` : '<div style="font-size:26px">🙂</div>'}<div id="p-fn">${photoFile ? esc(photoFile.name) : me?.avatar_url ? 'Photo already added. Tap to replace it.' : 'Take or choose a clear photo of your face (JPG or PNG)'}</div></div>
+    <input id="p-file" type="file" accept="image/*" hidden>
     <label class="rg-consent"><input type="checkbox" id="g-cs" ${rg.consent ? 'checked' : ''}> I confirm that the information provided is accurate and I consent to its use for barangay registration and service records.</label></div>
     <button id="g-back" class="btn out2">Back</button><button id="g-go" class="btn">Submit Registration</button>${rgFoot}`);
   const save = () => { rg.id_type = v('g-it'); rg.id_number = v('g-in').trim(); rg.consent = $('g-cs').checked; };
   $('rg-bk').onclick = e => { e.preventDefault(); save(); rg2(); };
   $('g-back').onclick = () => { save(); rg2(); };
   $('g-drop').onclick = () => $('g-file').click();
+  $('p-drop').onclick = () => $('p-file').click();
+  $('p-file').onchange = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (!/^image\//.test(f.type) && !/\.(png|jpe?g|heic|webp)$/i.test(f.name)) return rg3('Please choose a photo (JPG or PNG).');
+    save(); photoFile = f; rg3();
+  };
   $('g-file').onchange = e => {
     const f = e.target.files[0]; if (!f) return;
     if (f.size > 5 * 1024 * 1024) return rg3('The file is too large. Please choose a photo or PDF under 5 MB.');
@@ -384,6 +392,7 @@ function rg3(err = '') {
     save();
     if (!rg.id_number) return rg3('Enter your ID number.');
     if (!idFile && !rg.id_path) return rg3('Upload a clear photo or PDF of your ID.');
+    if (!photoFile && !me?.avatar_url) return rg3('Add a clear photo of your face. The barangay uses it to confirm that you are a real resident.');
     if (!rg.consent) return rg3('Please tick the confirmation box to continue.');
     $('g-go').disabled = true; $('g-go').textContent = 'Submitting…';
     let path = rg.id_path;
@@ -393,15 +402,25 @@ function rg3(err = '') {
       const up = await supabase.storage.from('resident-ids').upload(path, idFile, { contentType: idFile.type || (ext === 'pdf' ? 'application/pdf' : ext === 'png' ? 'image/png' : 'image/jpeg') });
       if (up.error) return rg3('Could not upload your ID: ' + up.error.message);
     }
+    let photo = null;
+    if (photoFile) {
+      try {
+        const blob = await shrinkPhoto(photoFile), pp = `${acct.id}/photo-${Date.now()}.jpg`;
+        const up2 = await supabase.storage.from('avatars').upload(pp, blob, { contentType: 'image/jpeg' }); if (up2.error) throw up2.error;
+        photo = { path: pp, url: supabase.storage.from('avatars').getPublicUrl(pp).data.publicUrl };
+      } catch (e) { return rg3('Could not upload your photo: ' + (e.message || e)); }
+    }
     const a = age(rg.birth) ?? 0;
     const p = { first: rg.first, middle: rg.middle, last: rg.last, birthdate: rg.birth, sex: rg.sex, civil: rg.civil, mobile: '0' + rg.mobile, email: rg.email,
       purok: rg.purok, street: rg.street, prev_street: rg.prev_street, prev_barangay: rg.prev_barangay, prev_city: rg.prev_city, residing_since: rg.since,
       voter: rg.voter, precinct_no: rg.precinct, valid_id_type: rg.id_type, id_number: rg.id_number, id_file_path: path, consent: true, ...detailPayload(a, rg.cur) };
     const { data: ref, error } = await supabase.rpc('submit_registry', { p });
     if (error) return rg3(error.message);
+    let photoNote = '';
+    if (photo) { const r2 = await supabase.rpc('set_registration_photo', { p_url: photo.url, p_path: photo.path }); if (r2.error) photoNote = r2.error.message; photoFile = null; }
     const { data: fresh } = await supabase.from('profiles').select('*').eq('id', acct.id).maybeSingle(); me = fresh || me;
     show(`<div class="wrap" style="text-align:center"><div style="font-size:56px">✅</div><h2>Registration Submitted</h2>
-      <div class="card">${row('Reference No.', esc(ref))}${row('Status', badge('pending'))}</div>
+      ${photoNote ? msg('Your photo could not be saved: ' + esc(photoNote) + '. Add it from My Profile.', 'er') : ''}<div class="card">${row('Reference No.', esc(ref))}${row('Status', badge('pending'))}</div>
       <p class="muted">Your information was submitted for barangay verification. You will be notified once it is verified.</p><p class="muted">${esc(MSG.contact_note)}</p><button id="x-home" class="btn">GO TO HOME</button></div>`);
     $('x-home').onclick = () => home();
   };
@@ -451,8 +470,9 @@ async function home(tab = 'home', opt = {}) {
     : `<div class="pg-h"><b style="color:${T[tab][1]}">${esc(T[tab][0])}</b>${edit}</div>`;
 
   const banner = pendingUpdate ? `<div class="banner"><b>Profile update waiting for approval</b><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p></div>` : !regDone() ? `<div class="banner"><b>Complete your resident registration</b><p>Finish your registration to unlock complaints and barangay services.</p><button class="btn" id="reg-now">REGISTER NOW</button></div>`
-    : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p><p>${esc(MSG.contact_note)}</p></div>`
-    : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>` : '';
+    : me.status === 'pending' ? `<div class="banner ok"><b>Registration submitted</b><p>Waiting for barangay verification${me.reference_no ? ' · Ref ' + esc(me.reference_no) : ''}.</p>${me.avatar_url ? '' : '<p><b>Please add your photo</b> in Profile so the barangay can verify you.</p>'}<p>${esc(MSG.contact_note)}</p></div>`
+    : ['correction', 'declined'].includes(me.status) ? `<div class="banner">${msg('Barangay note: ' + esc(me.review_note || ''), 'er')}${me.status === 'correction' ? '<button class="btn" id="fix">UPDATE INFORMATION</button>' : ''}</div>`
+    : me.role === 'resident' && !me.avatar_url ? '<div class="banner"><b>Add your photo</b><p>Go to Profile and add a clear photo of your face. It is used to confirm that you are a real resident. The Secretary or Administrator will approve it.</p></div>' : '';
   const locked = t => `<div class="card"><b>${t}</b><p class="muted">${lockMsg()}</p>${regDone() ? '' : '<button class="btn" id="reg-now">REGISTER NOW</button>'}</div>`;
   const verified = me?.status === 'verified' && !pendingUpdate;
   const body = {
@@ -512,7 +532,7 @@ function profileView(el) {
        ${me ? f('VOTER STATUS', voterLine(me)) : ''}${me ? f2('PRECINCT NUMBER (OPTIONAL)', me.precinct_no) : ''}${f('VALID ID', idn)}${me ? f('CATEGORY', catLine(me)) : ''}`
     : `${f2('FULL NAME', nm)}${f('USERNAME', uname)}${f2('CONTACT NUMBER', fmtPh(me?.mobile))}${f2('EMAIL ADDRESS', me?.contact_email || realEmail(acct.email))}${f2('ROLE', roleLabel(me))}`;
   const canEdit = me && (me.role !== 'resident' || me.status === 'verified');
-  el.innerHTML = `<div class="pf-card"><div class="pf-av">${me?.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="">` : esc(initials(nm))}</div>${me ? `<label class="pf-ph" for="pf-file">${me.avatar_url ? 'Change photo' : 'Add photo'}</label><input type="file" id="pf-file" accept="image/*" hidden>${me.avatar_url ? '<a href="#" class="pf-ph pf-rm" id="pf-rm">Remove</a>' : ''}` : ''}<div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
+  el.innerHTML = `<div class="pf-card"><div class="pf-av">${me?.avatar_url ? `<img src="${esc(me.avatar_url)}" alt="">` : esc(initials(nm))}</div>${me ? `<label class="pf-ph" for="pf-file">${me.avatar_url ? 'Change photo' : 'Add photo'}</label><input type="file" id="pf-file" accept="image/*" hidden>${me.avatar_url && !(me.role === 'resident' && me.status !== 'verified') ? '<a href="#" class="pf-ph pf-rm" id="pf-rm">Remove</a>' : ''}` : ''}<div class="pf-n">${esc(nm)}</div><div class="pf-s">${esc(sub)}</div>${isRes ? `<div class="pf-a">${esc(line)}</div>` : ''}</div>
     <div id="pf-pm"></div><div id="pf-pu"></div><div class="pf-fields">${fields}</div>
     <div id="pf-m"></div>${isRes ? `<button class="btn bl" id="pf-reg">${regDone() ? 'Edit Registration Details' : 'Complete Resident Registration'}</button>` : '<button class="btn bl" id="pf-reg">Edit Profile</button>'}
     <button class="btn gy" id="pf-pw">Change Password</button><button class="btn rd" id="pf-lo">Logout Account</button>
@@ -521,7 +541,7 @@ function profileView(el) {
     const u = data && data[0]; if (!u || !$('pf-pu')) return;
     pendingUpdate = u.status === 'pending' ? u : null;
     if (u.status === 'pending') {
-      $('pf-pu').innerHTML = `<div class="banner" style="margin:12px 0"><b>Profile update waiting for approval</b><p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p><button class="btn gy" id="pu-cancel" style="margin-top:0">Cancel my update</button></div>`;
+      $('pf-pu').innerHTML = `<div class="banner" style="margin:12px 0"><b>Profile update waiting for approval</b>${u.changes && u.changes.avatar_url ? `<p>New photo: <img src="${esc(u.changes.avatar_url)}" alt="" style="width:64px;height:64px;border-radius:50%;object-fit:cover;vertical-align:middle"></p>` : ''}<p>${esc(MSG.approval_notice)}</p><p>${esc(MSG.contact_note)}</p><button class="btn gy" id="pu-cancel" style="margin-top:0">Cancel my update</button></div>`;
       $('pu-cancel').onclick = async () => { await supabase.rpc('profile_update_cancel'); pendingUpdate = null; profileView(el); };
       if ($('pf-reg')) $('pf-reg').disabled = true;
     } else if (u.status === 'rejected') $('pf-pu').innerHTML = `<div style="margin:12px 0">${msg('Your last profile update was not approved: ' + esc(u.note || ''), 'er')}</div>`;
@@ -552,6 +572,7 @@ const shrinkPhoto = (file, size = 480) => new Promise((ok, no) => {
 async function savePhoto(file, el) {
   const out = t => { if ($('pf-pm')) $('pf-pm').innerHTML = t; };
   try {
+    const direct = me.role === 'resident' && me.status !== 'verified';   // before verification the photo is part of the registration the Secretary reviews
     let url = null, path = null;
     if (file) {
       out(msg('Saving your photo…'));
@@ -561,12 +582,11 @@ async function savePhoto(file, el) {
       if (up.error) throw up.error;
       url = supabase.storage.from('avatars').getPublicUrl(path).data.publicUrl;
     }
-    const { data: old, error } = await supabase.rpc('set_my_avatar', { p_url: url, p_path: path });
+    const { error } = direct ? await supabase.rpc('set_registration_photo', { p_url: url, p_path: path })
+                             : await supabase.rpc('profile_update_request', { p: { avatar_url: url, avatar_path: path } });
     if (error) { if (path) supabase.storage.from('avatars').remove([path]); throw error; }
-    if (old) supabase.storage.from('avatars').remove([old]);
-    me.avatar_url = url; me.avatar_path = path;
-    profileView(el);
-    out(msg(url ? 'Your profile photo was updated.' : 'Your profile photo was removed.'));
+    if (direct) { me.avatar_url = url; me.avatar_path = path; profileView(el); out(msg('Your photo was saved. The barangay will check it when verifying your registration.')); }
+    else { profileView(el); out(msg('Your photo change was sent to the Secretary and Administrator for approval. Your current photo stays until it is approved.')); }
   } catch (e) { out(msg(esc(e.message || 'The photo could not be saved.'), 'er')); }
 }
 let pendingUpdate = null;
@@ -694,7 +714,7 @@ async function verifyView(el, id, filter) {
   if (error || !p) { el.innerHTML = msg('Could not load this resident.', 'er'); return; }
   const canDecide = (me.role === 'admin' || me.role === 'employee') && !me.is_pb && p.status === 'pending';
   const canEdit = (me.role === 'admin' || me.role === 'employee') && !me.is_pb && ['unverified', 'pending', 'correction'].includes(p.status);
-  el.innerHTML = `<a href="#" id="bk">‹ Back to list</a><div class="card"><h3 style="color:var(--p)">${esc(p.full_name)}</h3>${row('Status', badge(p.status))}
+  el.innerHTML = `<a href="#" id="bk">‹ Back to list</a><div class="card"><h3 style="color:var(--p)">${esc(p.full_name)}</h3>${p.avatar_url ? `<a href="${esc(p.avatar_url)}" target="_blank" rel="noopener"><img src="${esc(p.avatar_url)}" alt="Resident photo" style="width:120px;height:120px;border-radius:14px;object-fit:cover;display:block;margin:8px 0"></a>` : msg('No photo yet. The resident must add a photo before approval.', 'er')}${row('Status', badge(p.status))}
     ${row('Reference', esc(p.reference_no || '—'))}${row('Mobile', esc(p.mobile))}${row('Birthdate / Age', esc(p.birthdate || '—') + ' / ' + (age(p.birthdate) ?? '—'))}
     ${row('Sex', esc(p.sex || '—'))}${row('Civil Status', esc(p.civil_status || '—'))}${row('Address', esc((p.street || '—') + ', ' + (p.purok || '—')))}
     ${row('Residency Category', esc(p.residency_type || '—'))}${row('Registered Voter', esc(p.voter_status || '—') + (p.voter_place ? ' · ' + esc(p.voter_place) : ''))}
@@ -714,6 +734,7 @@ async function verifyView(el, id, filter) {
       : (p.status === 'pending' ? msg('Punong Barangay accounts are view-only.') : '')}`;
   $('bk').onclick = e => { e.preventDefault(); residentsTab(el, filter); };
   const decide = async s => {
+    if (s === 'approved' && !p.avatar_url) { $('dm').innerHTML = msg('This resident has no photo yet. Choose Needs Correction so the resident can add one.', 'er'); return; }
     const { error: e } = await supabase.rpc('review_residency_v2', { p_user: id, p_status: s, p_note: v('nt') });
     if (e) $('dm').innerHTML = msg(esc(e.message), 'er'); else residentsTab(el, filter);
   };

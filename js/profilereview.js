@@ -10,7 +10,8 @@ const LABEL = { first_name: 'First name', middle_name: 'Middle name', last_name:
   mobile: 'Contact number', contact_email: 'Email address', purok: 'Purok', street: 'Street / house no.', previous_street: 'Previous address', previous_barangay: 'Previous barangay',
   previous_city: 'Previous municipality/city', residing_since: 'Residing here since', voter: 'Voter status', precinct_no: 'Precinct number', youth_status: 'Youth status',
   school_level: 'School level', employment_interest: 'Looking for work', study_interest: 'Continue studying', sk_voter_status: 'SK voter status', pension_status: 'Pension status',
-  senior_id: 'Senior ID', is_pwd: 'PWD', pwd_id: 'PWD ID', username: 'Username' };
+  senior_id: 'Senior ID', is_pwd: 'PWD', pwd_id: 'PWD ID', username: 'Username', avatar_url: 'Profile photo' };
+const thumb = u => u ? `<a href="${esc(u)}" target="_blank" rel="noopener"><img class="pu-ph" src="${esc(u)}" alt=""></a>` : '—';
 const VOTER = { this: 'Registered voter – this barangay', other: 'Registered voter – other barangay', not: 'Not a registered voter', unspecified: 'Not specified' };
 const val = (k, v) => (v === null || v === undefined || v === '' ? '—' : k === 'voter' ? (VOTER[v] || v) : k === 'is_pwd' ? (v === 'true' || v === true ? 'Yes' : 'No') : String(v));
 const when = d => new Date(d).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -28,7 +29,9 @@ export async function mountProfileUpdates(el, me) {
       <div class="qa-h"><span>WAITING FOR REVIEW (${pend.length})</span></div>
       ${rows.map(r => `<div class="cp-card" data-id="${r.id}" style="cursor:default"><div class="cp-top"><b style="color:#111">${esc(r.user_name || 'Resident')}</b><span class="cp-chip ${ST[r.status][1]}">${ST[r.status][0]}</span></div>
         <small class="muted">${esc(r.role === 'resident' ? 'Resident' : r.role || '')} • sent ${when(r.created_at)}${r.reviewed_at ? ' • reviewed ' + when(r.reviewed_at) : ''}</small>
-        <table class="pu-t">${Object.keys(r.changes || {}).map(k => `<tr><th>${esc(LABEL[k] || k)}</th><td class="pu-o">${esc(val(k, (r.previous || {})[k]))}</td><td class="pu-a">→</td><td class="pu-n">${esc(val(k, r.changes[k]))}</td></tr>`).join('')}</table>
+        <table class="pu-t">${Object.keys(r.changes || {}).filter(k => k !== 'avatar_path').map(k => k === 'avatar_url'
+          ? `<tr><th>${esc(LABEL[k])}</th><td class="pu-o">${thumb((r.previous || {})[k])}</td><td class="pu-a">→</td><td class="pu-n">${r.changes[k] ? thumb(r.changes[k]) : 'Photo removed'}</td></tr>`
+          : `<tr><th>${esc(LABEL[k] || k)}</th><td class="pu-o">${esc(val(k, (r.previous || {})[k]))}</td><td class="pu-a">→</td><td class="pu-n">${esc(val(k, r.changes[k]))}</td></tr>`).join('')}</table>
         ${r.note ? `<p class="muted">Note: ${esc(r.note)}</p>` : ''}
         ${r.status === 'pending' ? `<textarea class="rm" placeholder="Note to the resident (required when rejecting)"></textarea>
           <div class="pu-b"><button class="cp-g" data-d="approved">Approve</button><button class="cp-g rj" data-d="rejected">Reject</button></div>` : ''}</div>`).join('') || '<div class="card"><p class="muted">No profile updates yet.</p></div>'}`;
