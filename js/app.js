@@ -78,7 +78,7 @@ function login(err = '', ok = '') {
   $('lg-go').onclick = async () => {
     const u = v('lg-u').trim(); let email = null;
     if (u.includes('@')) email = u;
-    else if (/^[+\d\s-]+$/.test(u)) { let d = u.replace(/\D/g, ''); if (d.startsWith('63')) d = '0' + d.slice(2); else if (d.length === 10) d = '0' + d; email = mobEmail(d); }
+    else if (/^[+\d\s-]+$/.test(u)) { let d = u.replace(/\D/g, ''); if (d.startsWith('63')) d = '0' + d.slice(2); else if (d.length === 10) d = '0' + d; const { data: em } = await supabase.rpc('login_email_mobile', { p_mobile: d }); email = em || mobEmail(d); }
     else { const { data } = await supabase.rpc('login_email', { p_identifier: u }); email = data; }
     const bad = 'Incorrect username, mobile number or password.';
     if (!email) return login(bad);
@@ -264,21 +264,21 @@ function detailHTML(a, c) {                                       // questions t
     h += msg('You are tagged automatically as a Senior Citizen.') + sel('pension_status', 'Pension Status',
       [['Not a pensioner', 'Not a pensioner'], ['Social Pensioner of the LGU', 'Social Pensioner of the LGU'], ['SSS Pensioner', 'SSS / Other Pensioner'], ['Both', 'Both']]);
     if (/LGU|Both/.test(c.pension_status)) h += f('senior_id', 'Senior ID No. (optional)');
-  } else if (a >= 15) {
+  } else if (a >= 10 && a <= 30) {                              // the barangay youth range is 10 to 30 years old
     h += sel('school_status', 'Are you currently in school?', ['In school', 'Out of school']);
     if (c.school_status === 'In school') h += sel('school_level', 'School Level', a >= 18 ? SCHOOL18 : SCHOOL);
-    else h += sel('employment_interest', 'Interested in looking for work?', ['Looking for Work', 'Not looking for work'])
+    else h += (a >= 15 ? sel('employment_interest', 'Interested in looking for work?', ['Looking for Work', 'Not looking for work']) : '')
       + sel('study_interest', 'Interested in continuing to study?', ['Interested to continue studying', 'Not interested']);
-    if (a <= 17) h += sel('sk_voter_status', 'SK Voter Status', ['Registered SK Voter', 'Not yet registered for SK']);
+    if (a >= 15 && a <= 17) h += sel('sk_voter_status', 'SK Voter Status', ['Registered SK Voter', 'Not yet registered for SK']);
   }
   h += sel('pwd', 'Person with Disability (PWD)?', ['No', 'Yes']);
   if (c.pwd === 'Yes') h += f('pwd_id', 'PWD ID No. (optional)');
   return h;
 }
 function detailPayload(a, c) {
-  const youth = a >= 15 && a <= 30, adult = a >= 15 && a < 60, inSchool = c.school_status === 'In school', sr = a >= 60 && /LGU|Both/.test(c.pension_status);
-  return { youth_status: youth ? (inSchool ? 'In-School Youth' : 'Out-of-School Youth') : '', school_level: adult && inSchool ? c.school_level : '',
-    employment_interest: adult && !inSchool ? c.employment_interest : '', study_interest: adult && !inSchool ? c.study_interest : '',
+  const youth = a >= 10 && a <= 30, inSchool = c.school_status === 'In school', sr = a >= 60 && /LGU|Both/.test(c.pension_status);
+  return { youth_status: youth ? (inSchool ? 'In-School Youth' : 'Out-of-School Youth') : '', school_level: youth && inSchool ? c.school_level : '',
+    employment_interest: youth && !inSchool && a >= 15 ? c.employment_interest : '', study_interest: youth && !inSchool ? c.study_interest : '',
     sk_voter_status: a >= 15 && a <= 17 ? c.sk_voter_status : '', pension_status: a >= 60 ? c.pension_status : '', senior_id: sr ? c.senior_id : '',
     is_pwd: c.pwd === 'Yes', pwd_id: c.pwd === 'Yes' ? c.pwd_id : '' };
 }
