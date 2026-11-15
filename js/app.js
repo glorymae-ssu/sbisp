@@ -269,7 +269,7 @@ function detailHTML(a, c) {                                       // questions t
     if (c.school_status === 'In school') h += sel('school_level', 'School Level', a >= 18 ? SCHOOL18 : SCHOOL);
     else h += (a >= 15 ? sel('employment_interest', 'Interested in looking for work?', ['Looking for Work', 'Not looking for work']) : '')
       + sel('study_interest', 'Interested in continuing to study?', ['Interested to continue studying', 'Not interested']);
-    if (a >= 15 && a <= 17) h += sel('sk_voter_status', 'SK Voter Status', ['Registered SK Voter', 'Not yet registered for SK']);
+    if (a >= 15) h += sel('sk_voter_status', 'SK Voter Status', ['Registered SK Voter', 'Not yet registered for SK']);
   }
   h += sel('pwd', 'Person with Disability (PWD)?', ['No', 'Yes']);
   if (c.pwd === 'Yes') h += f('pwd_id', 'PWD ID No. (optional)');
@@ -279,7 +279,7 @@ function detailPayload(a, c) {
   const youth = a >= 10 && a <= 30, inSchool = c.school_status === 'In school', sr = a >= 60 && /LGU|Both/.test(c.pension_status);
   return { youth_status: youth ? (inSchool ? 'In-School Youth' : 'Out-of-School Youth') : '', school_level: youth && inSchool ? c.school_level : '',
     employment_interest: youth && !inSchool && a >= 15 ? c.employment_interest : '', study_interest: youth && !inSchool ? c.study_interest : '',
-    sk_voter_status: a >= 15 && a <= 17 ? c.sk_voter_status : '', pension_status: a >= 60 ? c.pension_status : '', senior_id: sr ? c.senior_id : '',
+    sk_voter_status: a >= 15 && a <= 30 ? c.sk_voter_status : '', pension_status: a >= 60 ? c.pension_status : '', senior_id: sr ? c.senior_id : '',
     is_pwd: c.pwd === 'Yes', pwd_id: c.pwd === 'Yes' ? c.pwd_id : '' };
 }
 function bindDetails(cur, getA) {                                 // keeps `cur` in sync with the form and redraws the age-based questions

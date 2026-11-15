@@ -112,7 +112,7 @@ export async function mountAnalytics(el) {
     + card('<b>Sex</b>' + bars(rows(d.sex)))
     + card('<b>Voters</b>' + bars(rows(d.voters)))
     + card('<b>Youth</b>' + bars(rows(d.youth_status)))
-    + card('<b>SK Voter Status (ages 15–17)</b>' + bars(rows(d.sk_voters)))
+    + card('<b>SK Voter Status (ages 15–30)</b>' + bars(rows(d.sk_voters)))
     + card('<b>Out-of-School Youth: Employment Interest</b>' + bars(rows(d.osy_employment)))
     + card('<b>Age Groups</b>' + bars(rows(d.age_groups)))
     + card('<b>Senior Citizens: Pension Status</b>' + bars(rows(d.senior_pension)))
