@@ -558,7 +558,7 @@ function profileView(el) {
   if ($('pf-rm')) $('pf-rm').onclick = e => { e.preventDefault(); savePhoto(null, el); };
   $('pf-org').onclick = e => { e.preventDefault(); orgPage(boot); };
 }
-/* Profile photo: every account can change it without approval; the change is logged for the Activity Monitor */
+/* Profile photo: required at registration; later changes and removals need approval from the Secretary or Administrator */
 const shrinkPhoto = (file, size = 480) => new Promise((ok, no) => {
   const url = URL.createObjectURL(file), img = new Image();
   img.onload = () => {
