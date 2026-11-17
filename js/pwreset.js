@@ -30,7 +30,7 @@ export async function mountPasswordResets(el, me) {
       b.disabled = true;
       const { error } = await supabase.rpc('pw_reset_review', { p_id: b.dataset.id, p_decision: b.dataset.a });
       if (error) return load(`<div class="msg er">${esc(error.message)}</div>`);
-      load(`<div class="msg">${approve ? 'Approved. Tell the resident to open Forgot Password and tap "I already have approval".' : 'Declined.'}</div>`);
+      load(`<div class="msg">${approve ? 'Approved. Tell the resident to open Forgot Password and tap "Check if my request is approved".' : 'Declined.'}</div>`);
     });
   };
   const load = async (flash = '') => {

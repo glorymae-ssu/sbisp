@@ -195,9 +195,13 @@ function forgot(err = '') {
     <p class="muted">Enter the mobile number, username or email you registered with, and your date of birth. The Barangay Hall will check that it is really you before you can set a new password.</p>${err ? msg(esc(err), 'er') : ''}
     ${field('f-id', 'Mobile Number, Username or Email', fp.id)}${field('f-b', 'Date of Birth', fp.birth, 'date')}
     <button id="f-go" class="btn">SEND RESET REQUEST</button>
-    <p style="text-align:center;margin-top:14px"><a href="#" id="f-ap">I already have approval</a></p></div>`);
+    <p style="text-align:center;margin-top:14px"><a href="#" id="f-ap">Check if my request is approved</a></p></div>`);
   $('bk').onclick = e => { e.preventDefault(); login(); };
-  $('f-ap').onclick = e => { e.preventDefault(); fp = { id: v('f-id').trim(), birth: v('f-b') }; forgotNew(); };
+  $('f-ap').onclick = e => {
+    e.preventDefault(); fp = { id: v('f-id').trim(), birth: v('f-b') };
+    if (!fp.id || !fp.birth) return forgot('Enter your details above first, then tap "Check if my request is approved".');
+    checkApproval();
+  };
   $('f-go').onclick = async () => {
     fp = { id: v('f-id').trim(), birth: v('f-b') };
     if (!fp.id || !fp.birth) return forgot('Enter your mobile number, username or email, and your date of birth.');
@@ -210,10 +214,29 @@ function forgot(err = '') {
 function forgotSent() {
   show(`<div class="wrap"><h2>Request Sent</h2>
     ${msg('If the details match a registered account, your request was sent to the Barangay Secretary and Administrator. They will verify that it is you. They may call or text you, or ask you to visit the Barangay Hall.')}
-    <p class="muted">After they approve (valid for 24 hours), come back to this page and tap "I already have approval" to create your new password.</p>
-    <button id="fs-ap" class="btn">I ALREADY HAVE APPROVAL</button><button id="fs-bk" class="btn gy">BACK TO LOGIN</button></div>`);
-  $('fs-ap').onclick = () => forgotNew();
+    <p class="muted">After they approve (valid for 24 hours), come back to this page and tap "Check if I'm approved". You can create your new password only after you are approved.</p>
+    <button id="fs-ap" class="btn">CHECK IF I'M APPROVED</button><button id="fs-bk" class="btn gy">BACK TO LOGIN</button></div>`);
+  $('fs-ap').onclick = () => checkApproval();
   $('fs-bk').onclick = () => { fp = {}; login(); };
+}
+/* the new-password screen opens only when the Barangay Hall has approved the request */
+async function checkApproval() {
+  const { data, error } = await supabase.rpc('pw_reset_status', { p_identifier: fp.id, p_birth: fp.birth });
+  if (error) return forgotStatus(error.message, true);
+  if (data === 'approved') return forgotNew();
+  forgotStatus({
+    pending: 'Not approved yet. The Barangay Hall is still checking your request. Please try again later.',
+    rejected: 'Your request was declined. Please visit the Barangay Hall for help.',
+    expired: 'Your request has expired. Please send a new reset request.',
+  }[data] || 'No reset request was found for these details. Check them, or send a new request.', data === 'rejected' || data === 'expired' || data === 'none');
+}
+function forgotStatus(text, canRestart) {
+  show(`<div class="wrap"><h2>Approval Status</h2>${msg(esc(text), 'wa')}
+    ${canRestart ? '<button id="st-new" class="btn">SEND A NEW REQUEST</button>' : '<button id="st-again" class="btn">CHECK AGAIN</button>'}
+    <button id="st-bk" class="btn gy">BACK TO LOGIN</button></div>`);
+  if ($('st-new')) $('st-new').onclick = () => forgot();
+  if ($('st-again')) $('st-again').onclick = () => checkApproval();
+  $('st-bk').onclick = () => { fp = {}; login(); };
 }
 function forgotNew(err = '') {
   show(`<div class="wrap"><a href="#" id="bk">‹ Back</a><h2>Create a New Password</h2>

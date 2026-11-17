@@ -8,7 +8,7 @@
 import { supabase } from './supabaseClient.js';
 import { esc } from './admin-features.js';
 
-export const APP_VERSION = '2026.11.22-2';
+export const APP_VERSION = '2026.11.22-3';
 
 /* ---------- 1. update-available banner ---------- */
 let watching = false;
