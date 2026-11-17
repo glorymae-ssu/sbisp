@@ -14,6 +14,7 @@ import { mountDashboard, staffPanels } from './dashboard.js';
 import { mountClassification } from './classify.js';
 import { mountMasterlist } from './masterlist.js';
 import { mountActivity } from './activity.js';
+import { startVersionWatch, checkWhatsNew, mountUpdates } from './updates.js';
 import { mountFinance } from './finance.js';
 import { DEFAULTS as MSG_DEFAULTS, loadMessages, mountMessages } from './messages.js';
 import { mountProfileUpdates } from './profilereview.js';
@@ -42,6 +43,7 @@ let me = null, acct = null;
 
 /* ------------------------------------------------------------------ start / session */
 export async function boot() {
+  startVersionWatch();                                     // shows a Refresh banner when a new version is online
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) return login();
   acct = session.user;
@@ -49,7 +51,7 @@ export async function boot() {
   const { data: p } = await supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle();
   if (!p) { me = null; return home(); }                     // account created, resident registry not done yet
   if (!p.active) return fatal('This account is deactivated. Please contact the Barangay Hall.');
-  me = p; supabase.rpc('touch_login');
+  me = p; supabase.rpc('touch_login'); checkWhatsNew(me);   // shows each new update once
   if (me.role !== 'resident') return staff();
   return home();
 }
@@ -637,15 +639,15 @@ function pwView(el) {
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Finance', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
-    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Portal Messages', 'Accounts', 'Analytics', 'Announcements', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Portal Messages', 'Accounts', 'Analytics', 'Announcements', 'System Updates', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
     : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : [...(['kagawad', 'treasurer'].includes(me.role) ? ['Finance'] : []), 'Complaints', 'Hearings', 'My Profile'];
   const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], Finance: ['coin', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY], 'Profile Updates': ['user', CL_ORANGE],
-    'Activity Monitor': ['stats', CL_ORANGE], 'Portal Messages': ['mega', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
+    'Activity Monitor': ['stats', CL_ORANGE], 'Portal Messages': ['mega', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'System Updates': ['mega', CL_GREEN], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me), Finance: el => mountFinance(el, me),
     'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), 'Portal Messages': el => mountMessages(el, MSG, m => { MSG = m; }), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
-    Announcements: mountAnnouncementsAdmin, 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
+    Announcements: mountAnnouncementsAdmin, 'System Updates': el => mountUpdates(el), 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
     Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]
     .filter(([k]) => ['home', 'Alerts'].includes(k) || tabs.includes(k));
