@@ -15,6 +15,7 @@ import { mountClassification } from './classify.js';
 import { mountMasterlist } from './masterlist.js';
 import { mountActivity } from './activity.js';
 import { startVersionWatch, checkWhatsNew, mountUpdates } from './updates.js';
+import { mountPasswordResets } from './pwreset.js';
 import { mountFinance } from './finance.js';
 import { DEFAULTS as MSG_DEFAULTS, loadMessages, mountMessages } from './messages.js';
 import { mountProfileUpdates } from './profilereview.js';
@@ -185,38 +186,50 @@ function caPw(err = '') {
   };
 }
 
-/* ------------------------------------------------------------------ forgot password (3 steps) */
+/* ------------------------------------------------------------------ forgot password
+   The resident sends a reset request. The Barangay Secretary or Administrator verifies who it is and approves.
+   Only after approval can the resident set a new password. */
 let fp = {};
 function forgot(err = '') {
   show(`<div class="wrap"><a href="#" id="bk">‹ Back to login</a><h2>Forgot Password</h2>
-    <p class="muted">Enter the mobile number you registered with and your date of birth so we can confirm it is you.</p>${err ? msg(esc(err), 'er') : ''}
-    ${field('f-mo', 'Mobile Number', fp.mobile, 'tel', '09XXXXXXXXX')}${field('f-b', 'Date of Birth', fp.birth, 'date')}
-    <button id="f-go" class="btn">CONTINUE</button></div>`);
+    <p class="muted">Enter the mobile number, username or email you registered with, and your date of birth. The Barangay Hall will check that it is really you before you can set a new password.</p>${err ? msg(esc(err), 'er') : ''}
+    ${field('f-id', 'Mobile Number, Username or Email', fp.id)}${field('f-b', 'Date of Birth', fp.birth, 'date')}
+    <button id="f-go" class="btn">SEND RESET REQUEST</button>
+    <p style="text-align:center;margin-top:14px"><a href="#" id="f-ap">I already have approval</a></p></div>`);
   $('bk').onclick = e => { e.preventDefault(); login(); };
-  $('f-go').onclick = () => {
-    fp = { mobile: v('f-mo').trim(), birth: v('f-b') };
-    if (!/^09\d{9}$/.test(fp.mobile) || !fp.birth) return forgot('Enter your 11-digit mobile number and date of birth.');
-    forgotOtp();
+  $('f-ap').onclick = e => { e.preventDefault(); fp = { id: v('f-id').trim(), birth: v('f-b') }; forgotNew(); };
+  $('f-go').onclick = async () => {
+    fp = { id: v('f-id').trim(), birth: v('f-b') };
+    if (!fp.id || !fp.birth) return forgot('Enter your mobile number, username or email, and your date of birth.');
+    $('f-go').disabled = true;
+    const { error } = await supabase.rpc('pw_reset_request', { p_identifier: fp.id, p_birth: fp.birth });
+    if (error) return forgot(error.message);
+    forgotSent();
   };
 }
-function forgotOtp(err = '') {
-  show(`<div class="wrap"><a href="#" id="bk">‹ Back</a><h2>Verify Your Mobile Number</h2>
-    <p class="muted">We sent a verification code to ${esc(fp.mobile)}.</p>${err ? msg(esc(err), 'er') : ''}
-    ${msg('Simulated OTP for this system: <b>123456</b>. No real SMS is sent.', 'wa')}${field('o-c', '6-digit code', '', 'text', '123456')}
-    <button id="o-go" class="btn">VERIFY</button></div>`);
-  $('bk').onclick = e => { e.preventDefault(); forgot(); };
-  $('o-go').onclick = () => (v('o-c').trim() === '123456' ? forgotNew() : forgotOtp('Incorrect code. Please try again.'));
+function forgotSent() {
+  show(`<div class="wrap"><h2>Request Sent</h2>
+    ${msg('If the details match a registered account, your request was sent to the Barangay Secretary and Administrator. They will verify that it is you. They may call or text you, or ask you to visit the Barangay Hall.')}
+    <p class="muted">After they approve (valid for 24 hours), come back to this page and tap "I already have approval" to create your new password.</p>
+    <button id="fs-ap" class="btn">I ALREADY HAVE APPROVAL</button><button id="fs-bk" class="btn gy">BACK TO LOGIN</button></div>`);
+  $('fs-ap').onclick = () => forgotNew();
+  $('fs-bk').onclick = () => { fp = {}; login(); };
 }
 function forgotNew(err = '') {
-  show(`<div class="wrap"><h2>Create a New Password</h2>${err ? msg(esc(err), 'er') : ''}
-    ${field('n-p', 'New Password', '', 'password', 'At least 6 characters')}${field('n-p2', 'Confirm New Password', '', 'password')}
+  show(`<div class="wrap"><a href="#" id="bk">‹ Back</a><h2>Create a New Password</h2>
+    <p class="muted">Use the same details you sent in your request.</p>${err ? msg(esc(err), 'er') : ''}
+    ${field('n-id', 'Mobile Number, Username or Email', fp.id)}${field('n-b', 'Date of Birth', fp.birth, 'date')}
+    ${field('n-p', 'New Password', '', 'password', 'At least 8 characters')}${field('n-p2', 'Confirm New Password', '', 'password')}
     <button id="n-go" class="btn">SAVE NEW PASSWORD</button></div>`);
+  $('bk').onclick = e => { e.preventDefault(); forgot(); };
   $('n-go').onclick = async () => {
+    fp = { id: v('n-id').trim(), birth: v('n-b') };
     const a = v('n-p');
-    if (a.length < 6) return forgotNew('Password must be at least 6 characters.');
+    if (!fp.id || !fp.birth) return forgotNew('Enter your mobile number, username or email, and your date of birth.');
+    if (a.length < 8) return forgotNew('Password must be at least 8 characters.');
     if (a !== v('n-p2')) return forgotNew('The two passwords do not match.');
-    const { error } = await supabase.rpc('reset_password_self', { p_mobile: fp.mobile, p_birthdate: fp.birth, p_new: a });
-    if (error) return forgot(error.message);
+    const { error } = await supabase.rpc('pw_reset_apply', { p_identifier: fp.id, p_birth: fp.birth, p_new: a });
+    if (error) return forgotNew(error.message);
     fp = {}; login('', 'Password changed. You can now log in with your new password.');
   };
 }
@@ -639,14 +652,14 @@ function pwView(el) {
 async function staff() {
   const admin = me.role === 'admin';
   const tabs = me.is_pb ? ['Complaints', 'Service Requests', 'Finance', 'Analytics', 'Masterlists', 'Hearings', 'My Profile']
-    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Portal Messages', 'Accounts', 'Analytics', 'Announcements', 'System Updates', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
-    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
+    : admin ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Activity Monitor', 'Password Resets', 'Portal Messages', 'Accounts', 'Analytics', 'Announcements', 'System Updates', 'Fee Schedule', 'Masterlists', 'Officials', 'Hearings', 'My Profile']
+    : me.role === 'employee' ? ['Residents', 'Complaints', 'Service Requests', 'Finance', 'Residency Classification', 'Profile Updates', 'Password Resets', 'Masterlists', 'Analytics', 'Officials', 'Hearings', 'My Profile']
     : [...(['kagawad', 'treasurer'].includes(me.role) ? ['Finance'] : []), 'Complaints', 'Hearings', 'My Profile'];
   const ICONS = { Residents: ['users', CL_NAVY], Complaints: ['complaint', CL_NAVY], 'Service Requests': ['svc', CL_GREEN], Finance: ['coin', CL_GREEN], 'Residency Classification': ['reg', CL_NAVY], 'Profile Updates': ['user', CL_ORANGE],
-    'Activity Monitor': ['stats', CL_ORANGE], 'Portal Messages': ['mega', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'System Updates': ['mega', CL_GREEN], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
+    'Activity Monitor': ['stats', CL_ORANGE], 'Password Resets': ['key', CL_ORANGE], 'Portal Messages': ['mega', CL_NAVY], Accounts: ['key', CL_GREEN], Analytics: ['stats', CL_GREEN], Announcements: ['mega', CL_ORANGE], 'System Updates': ['mega', CL_GREEN], 'Fee Schedule': ['coin', CL_NAVY], Masterlists: ['list', CL_GREEN],
     Officials: ['org', CL_NAVY], Hearings: ['cal', CL_ORANGE], 'My Profile': ['user', CL_GREEN] };
   const views = { Residents: residentsTab, Complaints: el => mountComplaints(el, me), 'Service Requests': el => mountServiceRequests(el, me), Finance: el => mountFinance(el, me),
-    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), 'Portal Messages': el => mountMessages(el, MSG, m => { MSG = m; }), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
+    'Residency Classification': el => mountClassification(el, me), 'Profile Updates': el => mountProfileUpdates(el, me), 'Activity Monitor': el => mountActivity(el), 'Password Resets': el => mountPasswordResets(el, me), 'Portal Messages': el => mountMessages(el, MSG, m => { MSG = m; }), Accounts: mountAccounts, Analytics: el => mountDashboard(el, me, mountAnalytics),
     Announcements: mountAnnouncementsAdmin, 'System Updates': el => mountUpdates(el), 'Fee Schedule': mountFeeSchedule, Masterlists: el => mountMasterlist(el, me), Officials: mountOfficials,
     Hearings: mountUpcomingHearings, 'My Profile': profileView };
   const NAV = [['home', 'Home', 'home'], ['Complaints', 'Complaints', 'complaint'], ['Analytics', 'Analytics', 'stats'], ['Alerts', 'Alerts', 'alert'], ['My Profile', 'Profile', 'user']]
